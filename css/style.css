@@ -1,0 +1,753 @@
+/* ==========================================================================
+   SNAKE RETRO 3D — CSS Theme
+   Requisito Visual: Paleta neon retro (#ff00ff, #00ffff, #ffff00) + fundos escuros
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
+
+:root {
+  --neon-magenta: #ff00ff;
+  --neon-cyan: #00ffff;
+  --neon-yellow: #ffff00;
+  --neon-green: #39ff14;
+  --neon-red: #ff3131;
+  --neon-orange: #ff6600;
+  --bg-dark: #0a0a1a;
+  --bg-panel: rgba(10, 10, 30, 0.85);
+  --border-glow: rgba(0, 255, 255, 0.3);
+  --font-retro: 'Press Start 2P', monospace;
+  --font-ui: 'Orbitron', sans-serif;
+}
+
+/* ---- Reset & Base ---- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-dark);
+  font-family: var(--font-ui);
+  color: #e0e0ff;
+}
+
+#app {
+  width: 100%; height: 100%;
+  position: relative;
+}
+
+canvas { display: block; outline: none; }
+
+/* Quando o menu 2D está ativo, escondemos o canvas e HUD.
+   Assim o menu não depende do ângulo da câmara no arranque. */
+body.menu-active canvas { display: none; }
+body.menu-active #hud,
+body.menu-active #light-indicators,
+body.menu-active #replay-bar { display: none !important; }
+
+/* ==========================================================================
+   LOADING SCREEN
+   Requisito: Ecrã de carregamento com barra de progresso
+   ========================================================================== */
+#loading-screen {
+  position: fixed; inset: 0;
+  z-index: 1000;
+  background: var(--bg-dark);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.8s ease;
+}
+#loading-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+#loading-screen .title {
+  font-family: var(--font-retro);
+  font-size: 28px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 20px var(--neon-cyan), 0 0 60px var(--neon-cyan);
+  margin-bottom: 40px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+#loading-screen .subtitle {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-magenta);
+  margin-bottom: 30px;
+  letter-spacing: 3px;
+}
+#loading-bar-container {
+  width: 320px; height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glow);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.15);
+}
+#loading-bar {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, var(--neon-magenta), var(--neon-cyan));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px var(--neon-cyan);
+}
+#loading-text {
+  font-family: var(--font-retro);
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 15px;
+}
+
+/* ==========================================================================
+   HUD (Heads-Up Display)
+   ========================================================================== */
+#hud {
+  position: fixed;
+  top: 12px; left: 12px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+#hud-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-glow);
+  border-radius: 8px;
+  padding: 14px 18px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.08), inset 0 0 30px rgba(0, 255, 255, 0.03);
+  min-width: 200px;
+  pointer-events: auto;
+}
+
+#hud-title {
+  font-family: var(--font-retro);
+  font-size: 11px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan);
+  margin-bottom: 10px;
+}
+
+#hud-score {
+  font-family: var(--font-retro);
+  font-size: 16px;
+  color: var(--neon-yellow);
+  text-shadow: 0 0 10px var(--neon-yellow);
+  margin-bottom: 6px;
+}
+
+#hud-level {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--neon-magenta);
+  margin-bottom: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#hud-controls {
+  font-size: 9px;
+  line-height: 1.7;
+  color: rgba(200, 200, 255, 0.5);
+  border-top: 1px solid rgba(0, 255, 255, 0.1);
+  padding-top: 8px;
+}
+#hud-controls kbd {
+  display: inline-block;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-retro);
+  font-size: 7px;
+  color: var(--neon-cyan);
+}
+
+/* ==========================================================================
+   LIGHT INDICATORS
+   Requisito: Teclas (1,2,3,4) para ligar/desligar cada luz com feedback visual na UI
+   ========================================================================== */
+#light-indicators {
+  position: fixed;
+  top: 12px; right: 12px;
+  z-index: 50;
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.light-indicator {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 12px;
+  backdrop-filter: blur(8px);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.light-indicator .dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+.light-indicator.on { border-color: var(--border-glow); }
+.light-indicator.off { opacity: 0.45; }
+.light-indicator.off .dot { background: #333 !important; box-shadow: none !important; }
+
+.light-indicator[data-light="ambient"] .dot { background: #fff; box-shadow: 0 0 8px #fff; }
+.light-indicator[data-light="directional"] .dot { background: var(--neon-yellow); box-shadow: 0 0 8px var(--neon-yellow); }
+.light-indicator[data-light="point"] .dot { background: var(--neon-orange); box-shadow: 0 0 8px var(--neon-orange); }
+.light-indicator[data-light="hemisphere"] .dot { background: var(--neon-cyan); box-shadow: 0 0 8px var(--neon-cyan); }
+
+/* ==========================================================================
+   PAUSE OVERLAY
+   ========================================================================== */
+#pause-overlay {
+  position: fixed; inset: 0;
+  z-index: 80;
+  background: rgba(5, 5, 20, 0.75);
+  display: none;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+#pause-overlay.visible { display: flex; }
+#pause-overlay .pause-text {
+  font-family: var(--font-retro);
+  font-size: 32px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 30px var(--neon-cyan), 0 0 80px var(--neon-cyan);
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+#pause-overlay .pause-sub {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: var(--neon-magenta);
+  margin-top: 20px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   GAME OVER OVERLAY
+   ========================================================================== */
+#gameover-overlay {
+  position: fixed; inset: 0;
+  z-index: 90;
+  background: rgba(5, 0, 0, 0.8);
+  display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+#gameover-overlay.visible { display: flex; }
+#gameover-overlay .go-title {
+  font-family: var(--font-retro);
+  font-size: 36px;
+  color: var(--neon-red);
+  text-shadow: 0 0 30px var(--neon-red), 0 0 80px rgba(255, 49, 49, 0.5);
+  animation: glitch 0.3s ease-in-out infinite alternate;
+}
+#gameover-overlay .go-score {
+  font-family: var(--font-retro);
+  font-size: 14px;
+  color: var(--neon-yellow);
+  margin-top: 20px;
+}
+#gameover-overlay .go-actions {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: rgba(200, 200, 255, 0.6);
+  margin-top: 30px;
+  text-align: center;
+  line-height: 2;
+}
+
+/* ==========================================================================
+   REPLAY CONTROLS
+   Requisito: SISTEMA DE REPLAY com controlos (play/pause/rewind) via tecla R
+   ========================================================================== */
+#replay-bar {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: var(--bg-panel);
+  border: 1px solid var(--neon-magenta);
+  border-radius: 10px;
+  padding: 12px 24px;
+  backdrop-filter: blur(12px);
+  display: none;
+  align-items: center; gap: 14px;
+  box-shadow: 0 0 25px rgba(255, 0, 255, 0.15);
+  min-width: 450px;
+}
+#replay-bar.visible { display: flex; }
+#replay-bar .replay-label {
+  font-family: var(--font-retro);
+  font-size: 8px;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 6px var(--neon-magenta);
+  white-space: nowrap;
+}
+#replay-bar button {
+  background: rgba(255, 0, 255, 0.12);
+  border: 1px solid rgba(255, 0, 255, 0.3);
+  color: var(--neon-magenta);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+#replay-bar button:hover {
+  background: rgba(255, 0, 255, 0.25);
+  box-shadow: 0 0 12px rgba(255, 0, 255, 0.3);
+}
+#replay-timeline {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(255, 0, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+#replay-timeline::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--neon-magenta);
+  box-shadow: 0 0 8px var(--neon-magenta);
+  cursor: pointer;
+}
+#replay-frame {
+  font-family: var(--font-retro);
+  font-size: 7px;
+  color: rgba(255, 0, 255, 0.5);
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* ==========================================================================
+   LEVEL TRANSITION
+   ========================================================================== */
+#level-transition {
+  position: fixed; inset: 0;
+  z-index: 100;
+  background: var(--bg-dark);
+  display: flex;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0s 0.5s;
+}
+#level-transition.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 0.5s ease, visibility 0s; }
+#level-transition .lt-name {
+  font-family: var(--font-retro);
+  font-size: 22px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 25px var(--neon-cyan);
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+#level-transition .lt-sub {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: var(--neon-magenta);
+  margin-top: 15px;
+}
+
+/* ==========================================================================
+   NOTIFICATIONS (Power-up toasts)
+   ========================================================================== */
+#notification-container {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.notification {
+  font-family: var(--font-retro);
+  font-size: 12px;
+  padding: 10px 24px;
+  border-radius: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.15);
+  animation: notif-in 0.3s ease, notif-out 0.3s ease 1.7s forwards;
+  pointer-events: none;
+}
+.notification.powerup {
+  border-color: var(--neon-yellow);
+  color: var(--neon-yellow);
+  text-shadow: 0 0 8px var(--neon-yellow);
+}
+.notification.warning {
+  border-color: var(--neon-red);
+  color: var(--neon-red);
+  text-shadow: 0 0 8px var(--neon-red);
+}
+
+/* ==========================================================================
+   MENU SYSTEM
+   ========================================================================== */
+#menu-overlay {
+  position: fixed; inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+#menu-overlay.visible { pointer-events: auto; }
+#menu-overlay.hidden { display: none; }
+
+/* ---- Sub-menu panels ---- */
+.menu-panel {
+  position: fixed; inset: 0;
+  z-index: 210;
+  display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(5, 5, 20, 0.88);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+.menu-panel.visible { display: flex; }
+
+/* ---- Main menu ---- */
+.menu-title {
+  font-family: var(--font-retro);
+  font-size: 32px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 30px var(--neon-cyan), 0 0 80px rgba(0, 255, 255, 0.25);
+  margin-bottom: 14px;
+}
+.menu-subtitle {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-magenta);
+  letter-spacing: 3px;
+  opacity: 0.9;
+  margin-bottom: 34px;
+}
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 280px;
+}
+.menu-btn {
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.22);
+  color: var(--neon-cyan);
+  font-family: var(--font-retro);
+  font-size: 11px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.menu-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(0, 255, 255, 0.14);
+  box-shadow: 0 0 24px rgba(0, 255, 255, 0.18);
+}
+.menu-btn.primary {
+  background: rgba(255, 0, 255, 0.10);
+  border-color: rgba(255, 0, 255, 0.35);
+  color: var(--neon-magenta);
+  box-shadow: 0 0 22px rgba(255, 0, 255, 0.14);
+}
+.menu-btn.primary:hover {
+  background: rgba(255, 0, 255, 0.18);
+  box-shadow: 0 0 30px rgba(255, 0, 255, 0.22);
+}
+.menu-hint {
+  margin-top: 26px;
+  font-family: var(--font-retro);
+  font-size: 8px;
+  color: rgba(200, 200, 255, 0.55);
+}
+.menu-hint kbd {
+  display: inline-block;
+  background: rgba(255, 0, 255, 0.12);
+  border: 1px solid rgba(255, 0, 255, 0.25);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin: 0 4px;
+  font-family: var(--font-retro);
+  font-size: 7px;
+  color: var(--neon-magenta);
+}
+
+.menu-panel-title {
+  font-family: var(--font-retro);
+  font-size: 18px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 20px var(--neon-cyan);
+  margin-bottom: 30px;
+}
+
+.menu-panel-back {
+  margin-top: 30px;
+  background: rgba(255, 0, 255, 0.1);
+  border: 1px solid rgba(255, 0, 255, 0.3);
+  color: var(--neon-magenta);
+  font-family: var(--font-retro);
+  font-size: 10px;
+  padding: 10px 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.menu-panel-back:hover {
+  background: rgba(255, 0, 255, 0.25);
+  box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* ---- Level selection cards ---- */
+.level-grid {
+  display: flex; gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 750px;
+}
+
+.level-card {
+  width: 210px;
+  background: var(--bg-panel);
+  border: 2px solid rgba(0, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.level-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.03), transparent);
+  pointer-events: none;
+}
+.level-card:hover {
+  border-color: var(--neon-cyan);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 255, 255, 0.15);
+}
+.level-card.selected {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.25), inset 0 0 30px rgba(0, 255, 255, 0.05);
+}
+.level-card .lc-num {
+  font-family: var(--font-retro);
+  font-size: 28px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 15px var(--neon-cyan);
+  margin-bottom: 8px;
+}
+.level-card .lc-name {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-magenta);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.level-card .lc-desc {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: rgba(200, 200, 255, 0.5);
+  line-height: 1.6;
+}
+.level-card .lc-speed {
+  font-family: var(--font-retro);
+  font-size: 8px;
+  color: var(--neon-yellow);
+  margin-top: 10px;
+}
+
+/* ---- Skin selection cards ---- */
+.skin-grid {
+  display: flex; gap: 28px;
+  justify-content: center;
+}
+
+.skin-card {
+  width: 180px;
+  background: var(--bg-panel);
+  border: 2px solid rgba(255, 0, 255, 0.15);
+  border-radius: 12px;
+  padding: 22px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+.skin-card:hover {
+  border-color: var(--neon-magenta);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(255, 0, 255, 0.15);
+}
+.skin-card.selected {
+  border-color: var(--neon-magenta);
+  box-shadow: 0 0 25px rgba(255, 0, 255, 0.25), inset 0 0 30px rgba(255, 0, 255, 0.05);
+}
+.skin-card .sc-preview {
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  box-shadow: 0 0 20px currentColor;
+  transition: all 0.3s ease;
+}
+.skin-card .sc-name {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-cyan);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ---- Settings panel ---- */
+.settings-list {
+  display: flex; flex-direction: column;
+  gap: 16px;
+  min-width: 320px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-panel);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px 20px;
+}
+.setting-row .setting-label {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: rgba(200, 200, 255, 0.7);
+}
+.setting-row .setting-value {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: var(--neon-cyan);
+  cursor: pointer;
+  padding: 4px 12px;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.setting-row .setting-value:hover {
+  background: rgba(0, 255, 255, 0.1);
+  border-color: var(--neon-cyan);
+}
+.setting-row .setting-value.active {
+  background: rgba(0, 255, 255, 0.15);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+/* ---- High Score display ---- */
+#hud-highscore {
+  font-family: var(--font-retro);
+  font-size: 8px;
+  color: var(--neon-green);
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* ---- Game Timer ---- */
+#hud-timer {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: rgba(200, 200, 255, 0.5);
+  margin-top: 6px;
+}
+
+/* ---- Menu high score ---- */
+.menu-highscore {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-green);
+  text-shadow: 0 0 10px var(--neon-green);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   ANIMATIONS
+   ========================================================================== */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, 2px); }
+  100% { transform: translate(0); }
+}
+
+@keyframes notif-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes notif-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-20px) scale(0.9); }
+}
+
+@keyframes scanline {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 4px; }
+}
+
+/* Scanline overlay for CRT feel on UI elements */
+.crt-scanlines::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    transparent 0px,
+    rgba(0, 0, 0, 0.05) 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  animation: scanline 0.1s linear infinite;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 768px) {
+  #hud-panel { padding: 10px 12px; min-width: 160px; }
+  #hud-title { font-size: 9px; }
+  #hud-score { font-size: 12px; }
+  #hud-controls { font-size: 7px; }
+  #replay-bar { min-width: 300px; padding: 8px 14px; }
+  #loading-screen .title { font-size: 18px; }
+  .light-indicator { font-size: 8px; padding: 4px 8px; }
+}

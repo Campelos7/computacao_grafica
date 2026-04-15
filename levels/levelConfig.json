@@ -1,0 +1,91 @@
+{
+  "levels": [
+    {
+      "id": 1,
+      "name": "NEON CITY",
+      "theme": {
+        "background": "#0a0a1a",
+        "fogColor": "#1a0a2e",
+        "fogNear": 22,
+        "fogFar": 65,
+        "groundEmissive": "#120024",
+        "gridColor": "#ff00ff",
+        "gridOpacity": 0.18,
+        "wallEmissive": "#00ffff",
+        "ambientIntensity": 0.5,
+        "ambientColor": "#4422aa",
+        "directionalColor": "#ff88ff",
+        "directionalIntensity": 1.0,
+        "bloomStrength": 0.9
+      },
+      "speed": 0.15,
+      "boardSize": 20,
+      "scoreToAdvance": 10,
+      "obstacles": [],
+      "powerups": ["speed"],
+      "description": "Welcome to the Grid. Eat. Grow. Survive."
+    },
+    {
+      "id": 2,
+      "name": "CYBER MAZE",
+      "theme": {
+        "background": "#0a1a0a",
+        "fogColor": "#0a2e1a",
+        "fogNear": 18,
+        "fogFar": 50,
+        "groundEmissive": "#002400",
+        "gridColor": "#39ff14",
+        "gridOpacity": 0.22,
+        "wallEmissive": "#ffff00",
+        "ambientIntensity": 0.4,
+        "ambientColor": "#224422",
+        "directionalColor": "#88ff88",
+        "directionalIntensity": 1.1,
+        "bloomStrength": 1.0
+      },
+      "speed": 0.12,
+      "boardSize": 20,
+      "scoreToAdvance": 15,
+      "obstacles": [
+        { "type": "movingWall", "position": [3, 0], "axis": "x", "range": 4, "speed": 1.5 },
+        { "type": "movingWall", "position": [-4, 2], "axis": "z", "range": 3, "speed": 1.2 },
+        { "type": "disappearingBlock", "position": [-5, 3], "interval": 5 },
+        { "type": "disappearingBlock", "position": [6, -4], "interval": 4 }
+      ],
+      "powerups": ["speed", "shield"],
+      "description": "The maze shifts. Walls move. Stay sharp."
+    },
+    {
+      "id": 3,
+      "name": "VOID REALM",
+      "theme": {
+        "background": "#1a0a1a",
+        "fogColor": "#2e0a2e",
+        "fogNear": 14,
+        "fogFar": 42,
+        "groundEmissive": "#240024",
+        "gridColor": "#ff00ff",
+        "gridOpacity": 0.25,
+        "wallEmissive": "#ff3131",
+        "ambientIntensity": 0.35,
+        "ambientColor": "#442244",
+        "directionalColor": "#ff44ff",
+        "directionalIntensity": 1.2,
+        "bloomStrength": 1.2
+      },
+      "speed": 0.095,
+      "boardSize": 20,
+      "scoreToAdvance": 999,
+      "obstacles": [
+        { "type": "movingWall", "position": [4, -2], "axis": "z", "range": 5, "speed": 2.0 },
+        { "type": "movingWall", "position": [-3, 5], "axis": "x", "range": 3, "speed": 1.8 },
+        { "type": "movingWall", "position": [0, -6], "axis": "x", "range": 6, "speed": 1.0 },
+        { "type": "disappearingBlock", "position": [6, -6], "interval": 4 },
+        { "type": "disappearingBlock", "position": [-4, -4], "interval": 3 },
+        { "type": "disappearingBlock", "position": [2, 7], "interval": 5 }
+      ],
+      "powerups": ["speed", "shield", "portal"],
+      "description": "The void consumes all. Only the worthy survive."
+    }
+  ]
+}

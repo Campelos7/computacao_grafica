@@ -1,53 +1,14 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-PT">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Snake 3D - Three.js</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: linear-gradient(180deg, #c9ebff 0%, #9fd8ff 35%, #77c268 100%);
-        font-family: Arial, sans-serif;
-      }
 
-      #app {
-        width: 100%;
-        height: 100%;
-      }
-
-      .hud {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        color: #e6f8ff;
-        background: linear-gradient(135deg, rgba(242, 251, 255, 0.72), rgba(224, 244, 255, 0.58));
-        border: 1px solid rgba(105, 164, 212, 0.35);
-        box-shadow: 0 10px 24px rgba(27, 56, 88, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-        backdrop-filter: blur(5px);
-        padding: 12px 14px;
-        border-radius: 12px;
-        line-height: 1.35;
-        user-select: none;
-        z-index: 20;
-      }
-
-      .hud .title {
-        font-weight: 700;
-        margin-bottom: 5px;
-        color: #1f5478;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
-      }
-
-      #score {
-        color: #2d7a33;
-        font-weight: 700;
-      }
-    </style>
-    <script type="importmap">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="Snake Retro 3D — Jogo da cobra em 3D com estética retro neon, construído com Three.js." />
+  <title>Snake Retro 3D — Three.js</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
       {
         "imports": {
           "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
@@ -55,9 +16,168 @@
         }
       }
     </script>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="./js/main.js"></script>
-  </body>
-  </html>
+</head>
+
+<body>
+
+  <!-- LOADING SCREEN -->
+  <div id="loading-screen">
+    <div class="title">SNAKE 3D</div>
+    <div class="subtitle">RETRO EDITION</div>
+    <div id="loading-bar-container">
+      <div id="loading-bar"></div>
+    </div>
+    <div id="loading-text">Initializing...</div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="app"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-panel">
+      <div id="hud-title">SNAKE 3D</div>
+      <div id="hud-score">0</div>
+      <div id="hud-highscore">HI: 0</div>
+      <div id="hud-level">LEVEL 1: NEON CITY</div>
+      <div id="hud-timer">00:00</div>
+      <div id="hud-controls">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Mover</div>
+        <div><kbd>SPACE</kbd> Pausar</div>
+        <div><kbd>C</kbd> Câmara</div>
+        <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> Luzes</div>
+        <div><kbd>R</kbd> Replay</div>
+        <div><kbd>M</kbd> Post-FX</div>
+        <div>🖱️ OrbitControls</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHT STATUS INDICATORS -->
+  <div id="light-indicators">
+    <div class="light-indicator on" data-light="ambient">
+      <span class="dot"></span>
+      <span class="light-label" data-name="1. Ambient">1. Ambient ON</span>
+    </div>
+    <div class="light-indicator on" data-light="directional">
+      <span class="dot"></span>
+      <span class="light-label" data-name="2. Directional">2. Directional ON</span>
+    </div>
+    <div class="light-indicator on" data-light="point">
+      <span class="dot"></span>
+      <span class="light-label" data-name="3. Point">3. Point ON</span>
+    </div>
+    <div class="light-indicator on" data-light="hemisphere">
+      <span class="dot"></span>
+      <span class="light-label" data-name="4. Hemisphere">4. Hemisphere ON</span>
+    </div>
+  </div>
+
+  <!-- PAUSE OVERLAY -->
+  <div id="pause-overlay">
+    <div>
+      <div class="pause-text">PAUSED</div>
+      <div class="pause-sub">Press SPACE to resume<br>Use mouse to orbit camera</div>
+    </div>
+  </div>
+
+  <!-- GAME OVER OVERLAY -->
+  <div id="gameover-overlay">
+    <div class="go-title">GAME OVER</div>
+    <div class="go-score" id="go-score">SCORE: 0</div>
+    <div id="go-highscore" style="font-family:'Press Start 2P',monospace;font-size:10px;color:#39ff14;margin-top:8px;">
+    </div>
+    <div class="go-actions">
+      Press <kbd>R</kbd> to watch REPLAY<br>
+      Press <kbd>SPACE</kbd> to return to MENU
+    </div>
+  </div>
+
+  <!-- REPLAY CONTROLS -->
+  <div id="replay-bar">
+    <span class="replay-label">📼 REPLAY</span>
+    <button id="btn-replay-rew" title="Rewind">⏪</button>
+    <button id="btn-replay-play" title="Play/Pause">⏸</button>
+    <button id="btn-replay-speed" title="Speed">1x</button>
+    <input type="range" id="replay-timeline" min="0" max="100" value="0" />
+    <span id="replay-frame">0/0</span>
+  </div>
+
+  <!-- LEVEL TRANSITION -->
+  <div id="level-transition">
+    <div class="lt-name" id="lt-name">LEVEL</div>
+    <div class="lt-sub" id="lt-sub">Loading...</div>
+  </div>
+
+  <!-- NOTIFICATION CONTAINER -->
+  <div id="notification-container"></div>
+
+  <!-- MENU OVERLAY (3D raycaster passthrough) -->
+  <div id="menu-overlay" class="visible"></div>
+
+  <!-- ================================================================
+        MAIN MENU (2D UI)
+        ================================================================ -->
+  <div id="panel-main" class="menu-panel visible">
+    <div class="menu-title">SNAKE 3D</div>
+    <div class="menu-subtitle">RETRO EDITION</div>
+    <div class="menu-actions">
+      <button class="menu-btn primary" id="btn-menu-play">PLAY</button>
+      <button class="menu-btn" id="btn-menu-levels">LEVELS</button>
+      <button class="menu-btn" id="btn-menu-skins">SKINS</button>
+      <button class="menu-btn" id="btn-menu-settings">SETTINGS</button>
+    </div>
+    <div class="menu-hint">Press <kbd>SPACE</kbd> to play</div>
+  </div>
+
+  <!-- ================================================================
+         SUB-MENU: LEVEL SELECT
+         ================================================================ -->
+  <div id="panel-levels" class="menu-panel">
+    <div class="menu-panel-title">SELECT LEVEL</div>
+    <div class="level-grid" id="level-grid">
+      <!-- Populated dynamically by main.js -->
+    </div>
+    <button class="menu-panel-back" id="btn-back-levels">← BACK</button>
+  </div>
+
+  <!-- ================================================================
+         SUB-MENU: SKINS
+         ================================================================ -->
+  <div id="panel-skins" class="menu-panel">
+    <div class="menu-panel-title">SNAKE SKIN</div>
+    <div class="skin-grid" id="skin-grid">
+      <!-- Populated dynamically by main.js -->
+    </div>
+    <button class="menu-panel-back" id="btn-back-skins">← BACK</button>
+  </div>
+
+  <!-- ================================================================
+         SUB-MENU: SETTINGS
+         ================================================================ -->
+  <div id="panel-settings" class="menu-panel">
+    <div class="menu-panel-title">SETTINGS</div>
+    <div class="settings-list">
+      <div class="setting-row">
+        <span class="setting-label">POST-FX</span>
+        <span class="setting-value active" id="setting-postfx">ON</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">SHADOWS</span>
+        <span class="setting-value active" id="setting-shadows">ON</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">CONTROLS</span>
+        <span class="setting-value" style="cursor:default;border:none;font-size:7px;color:rgba(200,200,255,0.5)">WASD /
+          Arrows + Mouse</span>
+      </div>
+    </div>
+    <button class="menu-panel-back" id="btn-back-settings">← BACK</button>
+  </div>
+
+  <!-- MAIN SCRIPT -->
+  <script type="module" src="./js/main.js"></script>
+
+</body>
+
+</html>
