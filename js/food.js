@@ -10,7 +10,6 @@ import { HALF_BOARD, randomInt, randomFreePosition, PALETTE } from './utils/help
 /* ── Tipos de item ── */
 const ITEM_TYPES = {
   FOOD:   'food',
-  SPEED:  'speed',
   SHIELD: 'shield',
   PORTAL: 'portal',
 };
@@ -62,25 +61,7 @@ export class Food {
     this.group.add(this.mesh);
   }
 
-  _createSpeedStar() {
-    this._clearMesh();
 
-    // Requisito: Estrela dourada rotativa + partículas
-    const geo = new THREE.OctahedronGeometry(0.35, 0);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffff00,
-      emissive: 0xffaa00,
-      emissiveIntensity: 1.0,
-      roughness: 0.1,
-      metalness: 0.8,
-    });
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.position.y = 0.55;
-    this.mesh.castShadow = true;
-    this.mesh.name = 'speed-star';
-    this.currentType = ITEM_TYPES.SPEED;
-    this.group.add(this.mesh);
-  }
 
   _createShieldOrb() {
     this._clearMesh();
@@ -171,7 +152,6 @@ export class Food {
     } else {
       const pType = this.activePowerups[Math.floor(Math.random() * this.activePowerups.length)];
       switch (pType) {
-        case 'speed':  this._createSpeedStar(); break;
         case 'shield': this._createShieldOrb(); break;
         case 'portal': this._createPortal(); break;
         default:       this._createFoodMesh();
@@ -211,15 +191,6 @@ export class Food {
         this.mesh.scale.setScalar(1 + Math.sin(elapsed * 5.5) * 0.15);
         break;
 
-      case ITEM_TYPES.SPEED:
-        // Estrela: rotação rápida dupla + pulso dourado
-        this.mesh.rotation.y += 0.06;
-        this.mesh.rotation.x += 0.03;
-        this.mesh.scale.setScalar(1 + Math.sin(elapsed * 6) * 0.2);
-        if (this.mesh.material) {
-          this.mesh.material.emissiveIntensity = 0.8 + Math.sin(elapsed * 8) * 0.5;
-        }
-        break;
 
       case ITEM_TYPES.SHIELD:
         // Orbe: rotação lenta + flutuação
@@ -301,7 +272,6 @@ export class Food {
    */
   getCollectColor() {
     switch (this.currentType) {
-      case ITEM_TYPES.SPEED:  return 0xffff00;
       case ITEM_TYPES.SHIELD: return 0x00ffff;
       case ITEM_TYPES.PORTAL: return 0xaa00ff;
       default:                return 0xff00ff;

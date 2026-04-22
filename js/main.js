@@ -8,36 +8,36 @@
    - Níveis JSON   - Power-ups   - Skins   - High Score
    ========================================================================== */
 import * as THREE from 'three';
-import { FontLoader }   from 'three/addons/loaders/FontLoader.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-import { DIRS, BOARD_SIZE }        from './utils/helpers.js';
-import { UIManager }               from './UIManager.js';
-import { LightManager }            from './LightManager.js';
-import { CameraController }        from './CameraController.js';
-import { ReplaySystem }            from './ReplaySystem.js';
-import { PostProcessing }          from './PostProcessing.js';
-import { LevelManager }            from './LevelManager.js';
-import { Obstacles }               from './Obstacles.js';
-import { Snake, SNAKE_SKINS }      from './snake.js';
-import { Food, ITEM_TYPES }        from './food.js';
+import { DIRS, BOARD_SIZE } from './utils/helpers.js';
+import { UIManager } from './UIManager.js';
+import { LightManager } from './LightManager.js';
+import { CameraController } from './CameraController.js';
+import { ReplaySystem } from './ReplaySystem.js';
+import { PostProcessing } from './PostProcessing.js';
+import { LevelManager } from './LevelManager.js';
+import { Obstacles } from './Obstacles.js';
+import { Snake, SNAKE_SKINS } from './snake.js';
+import { Food, ITEM_TYPES } from './food.js';
 
 /* ══════════════════════════════════════════════════════════════════════════
    STATES
    ══════════════════════════════════════════════════════════════════════════ */
 const STATES = {
-  LOADING:  'loading',
-  MENU:     'menu',
-  PLAYING:  'playing',
-  PAUSED:   'paused',
+  LOADING: 'loading',
+  MENU: 'menu',
+  PLAYING: 'playing',
+  PAUSED: 'paused',
   GAMEOVER: 'gameover',
-  REPLAY:   'replay',
+  REPLAY: 'replay',
 };
 
 const MENU_PAGES = {
-  MAIN:     'main',
-  LEVELS:   'levels',
-  SKINS:    'skins',
+  MAIN: 'main',
+  LEVELS: 'levels',
+  SKINS: 'skins',
   SETTINGS: 'settings',
 };
 
@@ -64,14 +64,14 @@ scene.background = new THREE.Color(0x0a0a1a);
 scene.fog = new THREE.Fog(0x1a0a2e, 22, 65);
 
 // ---- Managers ----
-const ui       = new UIManager();
-const camCtrl  = new CameraController(renderer.domElement);
+const ui = new UIManager();
+const camCtrl = new CameraController(renderer.domElement);
 const lightMgr = new LightManager(scene, ui);
 const obstacles = new Obstacles(scene);
 const levelMgr = new LevelManager(scene, obstacles, lightMgr, ui);
-const snake    = new Snake(scene);
-const food     = new Food(scene);
-const replay   = new ReplaySystem(ui);
+const snake = new Snake(scene);
+const food = new Food(scene);
+const replay = new ReplaySystem(ui);
 const postProc = new PostProcessing(renderer, scene, camCtrl.camera);
 
 ui.setLoadingProgress(5, 'Initializing...');
@@ -290,9 +290,9 @@ function loadMenuFont() {
 
 function createMenu3D() {
   const items = [
-    { text: 'PLAY',     y: 3.5, color: 0x00ffff, action: 'play' },
-    { text: 'LEVELS',   y: 1.8, color: 0xff00ff, action: 'levels' },
-    { text: 'SKINS',    y: 0.1, color: 0xffff00, action: 'skins' },
+    { text: 'PLAY', y: 3.5, color: 0x00ffff, action: 'play' },
+    { text: 'LEVELS', y: 1.8, color: 0xff00ff, action: 'levels' },
+    { text: 'SKINS', y: 0.1, color: 0xffff00, action: 'skins' },
     { text: 'SETTINGS', y: -1.6, color: 0x39ff14, action: 'settings' },
   ];
 
@@ -551,10 +551,10 @@ function handleMovementKey(event) {
   if (state !== STATES.PLAYING) return false;
   const code = event.code;
   const key = (event.key || '').toLowerCase();
-  if (code === 'ArrowLeft'  || key === 'a') { snake.turnLeft();              return true; }
-  if (code === 'ArrowRight' || key === 'd') { snake.turnRight();             return true; }
-  if (code === 'ArrowUp'    || key === 'w') { snake.setDirection(DIRS.up);   return true; }
-  if (code === 'ArrowDown'  || key === 's') { snake.setDirection(DIRS.down); return true; }
+  if (code === 'ArrowLeft' || key === 'a') { snake.turnLeft(); return true; }
+  if (code === 'ArrowRight' || key === 'd') { snake.turnRight(); return true; }
+  if (code === 'ArrowUp' || key === 'w') { snake.setDirection(DIRS.up); return true; }
+  if (code === 'ArrowDown' || key === 's') { snake.setDirection(DIRS.down); return true; }
   return false;
 }
 
@@ -702,10 +702,7 @@ function animate() {
       if (result.ate) {
         const itemType = food.type;
 
-        if (itemType === ITEM_TYPES.SPEED) {
-          snake.activateSpeedBoost(10, 2);
-          ui.showNotification('⚡ SPEED BOOST! 10s', 'powerup');
-        } else if (itemType === ITEM_TYPES.SHIELD) {
+        if (itemType === ITEM_TYPES.SHIELD) {
           snake.activateShield();
           ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
         } else if (itemType === ITEM_TYPES.PORTAL) {

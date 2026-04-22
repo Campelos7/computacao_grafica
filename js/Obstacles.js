@@ -1,32 +1,67 @@
 /* ==========================================================================
-   Obstacles.js — Obstáculos Dinâmicos
+   Obstacles.js — Obstáculos Dinâmicos Temáticos por Bioma
    Requisito: MovingWall oscila com Math.sin(tempo). DisappearingBlock
    alterna visibilidade a cada N segundos com fade de opacidade.
-   Deteção de colisão, texturas pixel-art, sombras.
+   Deteção de colisão, texturas, sombras.
+   Obstáculos adaptam-se visualmente ao bioma (floresta/deserto/neve).
    ========================================================================== */
 import * as THREE from 'three';
 import { createCanvasTexture } from './utils/helpers.js';
 
-/* ── Textura pixel-art para obstáculos ── */
-function createObstacleTexture() {
+/* ── Texturas por bioma ── */
+
+function createObstacleTexture(biome) {
+  const biomeConfig = {
+    forest: {
+      bg: '#1a2a15', brickColor: 'rgba(34, 170, 68, 0.15)',
+      strokeColor: 'rgba(34, 204, 68, 0.3)',
+    },
+    desert: {
+      bg: '#2a1a0a', brickColor: 'rgba(204, 102, 17, 0.15)',
+      strokeColor: 'rgba(255, 136, 51, 0.3)',
+    },
+    snow: {
+      bg: '#1a2535', brickColor: 'rgba(68, 136, 204, 0.15)',
+      strokeColor: 'rgba(136, 204, 255, 0.3)',
+    },
+  };
+  const cfg = biomeConfig[biome] || biomeConfig.forest;
+
   return createCanvasTexture(64, (ctx, size) => {
-    // Fundo escuro
-    ctx.fillStyle = '#1a0a2e';
+    ctx.fillStyle = cfg.bg;
     ctx.fillRect(0, 0, size, size);
 
-    // Padrão de tijolo pixel-art
     const brick = 8;
     for (let y = 0; y < size; y += brick) {
       const off = (Math.floor(y / brick) % 2) * (brick / 2);
       for (let x = -brick + off; x < size; x += brick * 2) {
-        ctx.fillStyle = 'rgba(255, 0, 255, 0.15)';
+        ctx.fillStyle = cfg.brickColor;
         ctx.fillRect(x, y, brick * 2 - 1, brick - 1);
-        ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)';
+        ctx.strokeStyle = cfg.strokeColor;
         ctx.strokeRect(x, y, brick * 2 - 1, brick - 1);
       }
     }
   }, { repeat: [2, 2], pixelArt: true });
 }
+
+/* ── Cores por bioma para obstáculos ── */
+const BIOME_OBSTACLE_COLORS = {
+  forest: {
+    wallColor: 0x226633, wallEmissive: 0x115522, wallEmissiveIntensity: 0.4,
+    wallEdge: 0x22cc44,
+    blockColor: 0x44aa44, blockEmissive: 0x115522, blockEmissiveIntensity: 0.5,
+  },
+  desert: {
+    wallColor: 0x8b6b3e, wallEmissive: 0x553311, wallEmissiveIntensity: 0.35,
+    wallEdge: 0xcc6611,
+    blockColor: 0xcc8833, blockEmissive: 0x664411, blockEmissiveIntensity: 0.45,
+  },
+  snow: {
+    wallColor: 0x6688aa, wallEmissive: 0x224466, wallEmissiveIntensity: 0.45,
+    wallEdge: 0x4488cc,
+    blockColor: 0x88bbdd, blockEmissive: 0x336699, blockEmissiveIntensity: 0.5,
+  },
+};
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export class Obstacles {
@@ -39,17 +74,20 @@ export class Obstacles {
     this.group.name = 'obstacles';
     this.scene.add(this.group);
 
-    this.obstacles = []; // { mesh, type, config, basePos }
-    this.obstacleTexture = createObstacleTexture();
+    this.obstacles = [];
+    this.currentBiome = 'forest';
+    this.obstacleTexture = null;
   }
 
   /**
    * Gera obstáculos a partir do config de nível.
-   * Requisito: Integrar deteção de colisão, texturas pixel-art, sombras.
    * @param {Array} configs — array de objectos do levelConfig
+   * @param {string} biome — bioma actual (forest/desert/snow)
    */
-  generate(configs) {
+  generate(configs, biome = 'forest') {
     this.clear();
+    this.currentBiome = biome;
+    this.obstacleTexture = createObstacleTexture(biome);
 
     for (const cfg of configs) {
       switch (cfg.type) {
@@ -65,13 +103,14 @@ export class Obstacles {
 
   /* ── MovingWall ── */
   _addMovingWall(cfg) {
-    // Requisito: Oscila ao longo do eixo X/Z usando Math.sin(tempo)
+    const colors = BIOME_OBSTACLE_COLORS[this.currentBiome] || BIOME_OBSTACLE_COLORS.forest;
+
     const geo = new THREE.BoxGeometry(1.8, 1.2, 0.6);
     const mat = new THREE.MeshStandardMaterial({
       map: this.obstacleTexture,
-      color: 0xff00ff,
-      emissive: 0x660066,
-      emissiveIntensity: 0.5,
+      color: colors.wallColor,
+      emissive: colors.wallEmissive,
+      emissiveIntensity: colors.wallEmissiveIntensity,
       roughness: 0.6,
       metalness: 0.2,
       bumpMap: this.obstacleTexture,
@@ -87,7 +126,7 @@ export class Obstacles {
     // Linha brilhante superior
     const edgeGeo = new THREE.BoxGeometry(1.82, 0.05, 0.62);
     const edgeMat = new THREE.MeshBasicMaterial({
-      color: 0xff00ff,
+      color: colors.wallEdge,
       transparent: true,
       opacity: 0.7,
     });
@@ -108,13 +147,14 @@ export class Obstacles {
 
   /* ── DisappearingBlock ── */
   _addDisappearingBlock(cfg) {
-    // Requisito: Alterna visibilidade a cada N segundos com fade de opacidade
+    const colors = BIOME_OBSTACLE_COLORS[this.currentBiome] || BIOME_OBSTACLE_COLORS.forest;
+
     const geo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
     const mat = new THREE.MeshStandardMaterial({
       map: this.obstacleTexture,
-      color: 0x00ffff,
-      emissive: 0x004466,
-      emissiveIntensity: 0.6,
+      color: colors.blockColor,
+      emissive: colors.blockEmissive,
+      emissiveIntensity: colors.blockEmissiveIntensity,
       roughness: 0.5,
       metalness: 0.15,
       transparent: true,
@@ -139,45 +179,37 @@ export class Obstacles {
 
   /**
    * Actualiza todos os obstáculos.
-   * @param {number} elapsed — tempo total decorrido (s)
-   * @param {number} delta — tempo desde último frame (s)
    */
   update(elapsed, delta) {
     for (const obs of this.obstacles) {
       if (obs.type === 'movingWall') {
-        // Requisito: Math.sin(tempo) para oscilar
         const offset = Math.sin(elapsed * obs.speed) * obs.range;
         if (obs.axis === 'x') {
           obs.mesh.position.x = obs.basePos.x + offset;
         } else {
           obs.mesh.position.z = obs.basePos.z + offset;
         }
-        // Glow do bordo superior
         if (obs.mesh.children[0] && obs.mesh.children[0].material) {
           obs.mesh.children[0].material.opacity = 0.5 + Math.abs(Math.sin(elapsed * 3)) * 0.5;
         }
       }
 
       if (obs.type === 'disappearingBlock') {
-        // Ciclo: visível -> fade out -> invisível -> fade in -> visível ...
         const cycle = elapsed % (obs.interval * 2);
         const halfInterval = obs.interval;
 
         if (cycle < halfInterval) {
-          // Visível com possível fade in
           const fadeIn = Math.min(cycle / 0.5, 1);
           obs.mesh.material.opacity = fadeIn;
           obs.mesh.visible = true;
           obs._visible = true;
         } else {
-          // Fade out e invisível
           const fadeOut = Math.max(0, 1 - (cycle - halfInterval) / 0.5);
           obs.mesh.material.opacity = fadeOut;
           obs._visible = fadeOut > 0.3;
           obs.mesh.visible = fadeOut > 0.01;
         }
 
-        // Rotação lenta quando visível
         if (obs.mesh.visible) {
           obs.mesh.rotation.y += 0.005;
         }
@@ -186,14 +218,11 @@ export class Obstacles {
   }
 
   /**
-   * Verifica colisão com um ponto (posição da cabeça da cobra).
-   * @param {THREE.Vector3} position
-   * @returns {boolean}
+   * Verifica colisão com um ponto.
    */
   checkCollision(position) {
     for (const obs of this.obstacles) {
       if (obs.type === 'movingWall') {
-        // Verificar se a posição está dentro da bounding box da parede
         const wx = obs.mesh.position.x;
         const wz = obs.mesh.position.z;
         if (Math.abs(position.x - wx) < 1.0 && Math.abs(position.z - wz) < 0.4) {
@@ -212,15 +241,13 @@ export class Obstacles {
   }
 
   /**
-   * Devolve posições de todos os obstáculos visíveis (para evitar spawnar comida lá).
-   * @returns {Array<{x:number, z:number}>}
+   * Devolve posições de todos os obstáculos visíveis.
    */
   getOccupiedPositions() {
     const positions = [];
     for (const obs of this.obstacles) {
       const p = obs.mesh.position;
       positions.push({ x: Math.round(p.x), z: Math.round(p.z) });
-      // Para moving walls, incluir um range extra
       if (obs.type === 'movingWall') {
         for (let i = -obs.range; i <= obs.range; i++) {
           if (obs.axis === 'x') {
@@ -236,14 +263,12 @@ export class Obstacles {
 
   /**
    * Limpa todos os obstáculos (para mudança de nível).
-   * Requisito: Prevenir memory leaks ao descartar geometrias/materiais.
    */
   clear() {
     for (const obs of this.obstacles) {
       this.group.remove(obs.mesh);
       if (obs.mesh.geometry) obs.mesh.geometry.dispose();
       if (obs.mesh.material) obs.mesh.material.dispose();
-      // Filhos (glow edges)
       while (obs.mesh.children.length > 0) {
         const child = obs.mesh.children[0];
         obs.mesh.remove(child);
