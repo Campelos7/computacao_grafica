@@ -85,6 +85,15 @@ let accumulator = 0;
 let gameTimer = 0;
 const clock = new THREE.Clock();
 
+// ---- Combo System ----
+// Combo activa-se apenas quando se come 2 comidas num intervalo curto
+let comboCount = 0;
+let comboTimer = 0;
+let lastEatTime = -999;            // timestamp da última comida
+const COMBO_WINDOW = 2.0;          // segundos — janela para comer outra comida e activar combo
+const COMBO_DECAY  = 3.0;          // segundos — tempo até o combo expirar depois de activado
+const COMBO_MULTIPLIERS = [1, 1, 1.5, 2, 2.5, 3]; // combo 0,1,2,3,4,5+
+
 // ---- Selections ----
 let selectedLevelIndex = 0;
 let selectedSkinIndex = 0;
@@ -482,6 +491,9 @@ function startGame() {
   score = 0;
   accumulator = 0;
   gameTimer = 0;
+  comboCount = 0;
+  comboTimer = 0;
+  lastEatTime = -999;
   ui.setScore(score);
   ui.setTimer(0);
   ui.showMenu(false);
@@ -690,6 +702,26 @@ function animate() {
     gameTimer += delta;
     ui.setTimer(gameTimer);
 
+    // Combo timer decay — combo expira após COMBO_DECAY segundos
+    if (comboCount > 0) {
+      comboTimer -= delta;
+      if (comboTimer <= 0) {
+        comboCount = 0;
+        comboTimer = 0;
+        ui.hideCombo();
+      }
+    }
+
+    // Power-up timer UI update
+    if (snake.shieldActive && snake.shieldMesh) {
+      ui.updatePowerUpTimer('shield', true);
+    }
+    if (snake.speedTimer > 0) {
+      ui.updatePowerUpTimer('speed', true, snake.speedTimer);
+    } else if (!snake.shieldActive) {
+      ui.hidePowerUp();
+    }
+
     snake.updatePowerUps(delta);
     const effectiveStep = stepDuration / snake.speedMultiplier;
 
@@ -702,23 +734,48 @@ function animate() {
       if (result.ate) {
         const itemType = food.type;
 
+        // Combo: só activa quando se come 2 comidas num intervalo curto
+        const now = clock.elapsedTime;
+        const timeSinceLastEat = now - lastEatTime;
+        lastEatTime = now;
+
+        if (timeSinceLastEat <= COMBO_WINDOW) {
+          // Comeu dentro da janela — incrementar combo
+          comboCount++;
+          comboTimer = COMBO_DECAY;
+        } else {
+          // Demorou demais — resetar combo (não perde pontos, apenas o multiplicador)
+          comboCount = 1;  // esta comida conta como a primeira do próximo possível combo
+          comboTimer = 0;
+          ui.hideCombo();
+        }
+        const comboMult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
+
         if (itemType === ITEM_TYPES.SHIELD) {
           snake.activateShield();
           ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
+          ui.showPowerUp('shield');
         } else if (itemType === ITEM_TYPES.PORTAL) {
           const safePos = new THREE.Vector3(0, 0, 0);
           snake.segments[0].copy(safePos);
           ui.showNotification('🌀 PORTAL TELEPORT!', 'powerup');
         } else {
-          score += 1;
+          const pts = Math.floor(1 * comboMult);
+          score += pts;
           ui.setScore(score);
         }
 
         food.emitCollectParticles(food.cell.clone(), food.getCollectColor());
 
         if (itemType !== ITEM_TYPES.FOOD) {
-          score += 3;
+          const pts = Math.floor(3 * comboMult);
+          score += pts;
           ui.setScore(score);
+        }
+
+        // Mostrar combo se >= 2
+        if (comboCount >= 2) {
+          ui.showCombo(comboCount, comboMult);
         }
 
         if (levelMgr.shouldAdvance(score)) {
@@ -736,6 +793,11 @@ function animate() {
       }
 
       if (result.dead) {
+        comboCount = 0;
+        comboTimer = 0;
+        lastEatTime = -999;
+        ui.hideCombo();
+        ui.hidePowerUp();
         handleGameOver();
       }
 
@@ -763,6 +825,7 @@ function animate() {
 
   lightMgr.setPointLightPosition(food.cell.x, 1.3, food.cell.z);
   lightMgr.pulsePointLight(elapsed);
+  lightMgr.pulseHemisphere(elapsed);
 
   if (state === STATES.PLAYING || state === STATES.REPLAY) {
     camCtrl.followSnake(snake.headPosition, snake.direction);

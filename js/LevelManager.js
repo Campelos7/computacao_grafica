@@ -33,6 +33,98 @@ function loadImportedTexture(name, path, repeatX = 1, repeatY = 1) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   NORMAL MAPS & ROUGHNESS MAPS PROCEDURAIS (PBR completo)
+   Gerados via Canvas para demonstrar conhecimento de Physically Based Rendering
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Gera um Normal Map procedural via Canvas (simula relevo com ruído) */
+function createProceduralNormalMap(size, intensity, noiseScale, biomeType) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(size, size);
+  const d = imgData.data;
+
+  // Gerar heightmap com ruído
+  const heights = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let h = 0;
+      // Múltiplas oitavas de ruído para mais detalhe
+      h += Math.sin(x * noiseScale) * Math.cos(y * noiseScale) * 0.5;
+      h += Math.sin(x * noiseScale * 2.3 + 1.7) * Math.cos(y * noiseScale * 2.1 + 0.8) * 0.25;
+      h += Math.sin(x * noiseScale * 5.1 + 3.2) * Math.cos(y * noiseScale * 4.7 + 2.1) * 0.125;
+      if (biomeType === 'forest') {
+        h += Math.sin(x * 0.08 + y * 0.06) * 0.3; // ondulações de raízes
+      } else if (biomeType === 'desert') {
+        h += Math.sin(x * 0.04) * Math.sin(y * 0.02) * 0.4; // dunas
+      } else if (biomeType === 'snow') {
+        h += (Math.random() - 0.5) * 0.15; // cristais aleatórios
+      }
+      heights[y * size + x] = h;
+    }
+  }
+
+  // Converter heightmap para normal map (Sobel)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const xP = heights[y * size + Math.min(x + 1, size - 1)];
+      const xN = heights[y * size + Math.max(x - 1, 0)];
+      const yP = heights[Math.min(y + 1, size - 1) * size + x];
+      const yN = heights[Math.max(y - 1, 0) * size + x];
+      const dx = (xN - xP) * intensity;
+      const dy = (yN - yP) * intensity;
+      const len = Math.sqrt(dx * dx + dy * dy + 1);
+      d[idx]     = Math.floor(((dx / len) * 0.5 + 0.5) * 255); // R
+      d[idx + 1] = Math.floor(((dy / len) * 0.5 + 0.5) * 255); // G
+      d[idx + 2] = Math.floor(((1.0 / len) * 0.5 + 0.5) * 255); // B
+      d[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Gera um Roughness Map procedural via Canvas (variação de brilho na superfície) */
+function createProceduralRoughnessMap(size, baseRoughness, variation, biomeType) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(size, size);
+  const d = imgData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      let r = baseRoughness;
+      // Variação orgânica
+      r += Math.sin(x * 0.12) * Math.cos(y * 0.1) * variation;
+      r += Math.sin(x * 0.25 + y * 0.18) * variation * 0.5;
+      if (biomeType === 'snow') {
+        r -= 0.15; // neve é mais lisa
+      } else if (biomeType === 'desert') {
+        r += (Math.random() - 0.5) * 0.08; // areia granulada
+      }
+      const v = Math.max(0, Math.min(1, r)) * 255;
+      d[idx] = d[idx + 1] = d[idx + 2] = Math.floor(v);
+      d[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
    TEXTURAS PROCEDURAIS POR BIOMA (complementam as importadas)
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -235,7 +327,7 @@ function createParticleSystem(biome, boardHalf) {
 
   if (biome === 'forest') {
     // ── Pirilampos (Fireflies) ──
-    const count = 60;
+    const count = 40;
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -476,247 +568,10 @@ function createAtmosphericEffect(color1, color2, opacity, scaleX, scaleZ) {
 /* ══════════════════════════════════════════════════════════════════════════
    DECORAÇÕES COMPLEXAS COM SHADER — Uma única por bioma
 
-   Floresta: Cascata (waterfall shader)
-   Deserto: Fogueira (partículas de fogo + PointLight)
+   Deserto: (reservado)
    Neve: Aurora Boreal (shader GLSL avançado)
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** 🌿 Cascata — Parede rochosa + água animada com ShaderMaterial + Espuma */
-function createWaterfall(x, z) {
-  const g = new THREE.Group();
-  g.name = 'waterfall';
-
-  // Parede de rocha atrás
-  const rockTex = loadImportedTexture('bark', 'textures/bark.png', 2, 3);
-  const rockMat = new THREE.MeshStandardMaterial({
-    map: rockTex,
-    color: 0x555544, emissive: 0x111108, emissiveIntensity: 0.03,
-    roughness: 0.95, metalness: 0.05,
-  });
-  const rockWall = new THREE.Mesh(new THREE.BoxGeometry(2.5, 4, 0.8), rockMat);
-  rockWall.position.set(0, 2, 0.4);
-  rockWall.castShadow = true; rockWall.receiveShadow = true;
-  g.add(rockWall);
-
-  // Saliências rochosas
-  for (let i = 0; i < 3; i++) {
-    const ledge = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5+Math.random()*0.8, 0.15, 0.3), rockMat
-    );
-    ledge.position.set((Math.random()-0.5)*1.5, 1+i*1.2, 0);
-    ledge.castShadow = true;
-    g.add(ledge);
-  }
-
-  // Água animada — PlaneGeometry com ShaderMaterial
-  const waterMat = new THREE.ShaderMaterial({
-    transparent: true, side: THREE.DoubleSide, depthWrite: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uWaterColor: { value: new THREE.Color('#2288aa') },
-      uFoamColor: { value: new THREE.Color('#aaddee') },
-    },
-    vertexShader: `
-      varying vec2 vUv; uniform float uTime;
-      void main() {
-        vUv = uv; vec3 pos = position;
-        pos.z += sin(pos.y * 4.0 + uTime * 3.0) * 0.04;
-        pos.x += sin(pos.y * 3.0 + uTime * 2.5) * 0.02;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime; uniform vec3 uWaterColor; uniform vec3 uFoamColor;
-      varying vec2 vUv;
-      void main() {
-        vec2 uv = vUv;
-        uv.y = fract(uv.y - uTime * 0.8);
-        float foam = sin(uv.x * 20.0 + uTime * 2.0) * cos(uv.y * 15.0) * 0.5 + 0.5;
-        foam = pow(foam, 3.0);
-        vec3 color = mix(uWaterColor, uFoamColor, foam * 0.5);
-        float edgeFade = smoothstep(0.0, 0.1, uv.x) * smoothstep(1.0, 0.9, uv.x);
-        float alpha = 0.7 * edgeFade;
-        gl_FragColor = vec4(color, alpha);
-      }
-    `,
-  });
-  const waterPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 4, 12, 24), waterMat);
-  waterPlane.position.set(0, 2, -0.01);
-  waterPlane.name = 'waterfall-water';
-  g.add(waterPlane);
-
-  // Poça na base
-  const poolMat = new THREE.MeshPhysicalMaterial({
-    color: 0x1a6688, roughness: 0.05, metalness: 0.3,
-    transparent: true, opacity: 0.6,
-  });
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(1.5, 16), poolMat);
-  pool.rotation.x = -Math.PI/2; pool.position.y = 0.02;
-  pool.receiveShadow = true;
-  g.add(pool);
-
-  // SpotLight azul iluminando a base
-  const spotLight = new THREE.SpotLight(0x4488cc, 1.5, 8, Math.PI/4, 0.5);
-  spotLight.position.set(0, 3, -1.5);
-  spotLight.target.position.set(0, 0, 0);
-  spotLight.name = 'waterfall-light';
-  g.add(spotLight);
-  g.add(spotLight.target);
-
-  // Espuma (pequenas esferas brancas na base)
-  const foamMat = new THREE.MeshBasicMaterial({
-    color: 0xcceeee, transparent: true, opacity: 0.5,
-  });
-  for (let i = 0; i < 8; i++) {
-    const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.04+Math.random()*0.04, 4, 4), foamMat);
-    const a = Math.random() * Math.PI * 2;
-    bubble.position.set(Math.cos(a)*0.6, 0.05, Math.sin(a)*0.6);
-    bubble.name = 'waterfall-bubble';
-    g.add(bubble);
-  }
-
-  g.position.set(x, 0, z);
-  return g;
-}
-
-/** 🏜️ Fogueira — Pedras + Troncos + Partículas de fogo + PointLight pulsante */
-function createCampfire(x, z) {
-  const g = new THREE.Group();
-  g.name = 'campfire';
-
-  // Base de pedras em círculo
-  const stoneMat = new THREE.MeshStandardMaterial({
-    color: 0x555555, roughness: 0.9, metalness: 0.05,
-  });
-  for (let i = 0; i < 8; i++) {
-    const a = (i/8) * Math.PI * 2;
-    const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12+Math.random()*0.05, 0), stoneMat);
-    stone.position.set(Math.cos(a)*0.35, 0.08, Math.sin(a)*0.35);
-    stone.castShadow = true;
-    g.add(stone);
-  }
-
-  // Troncos cruzados
-  const logMat = new THREE.MeshStandardMaterial({
-    color: 0x3a2010, emissive: 0x1a0800, emissiveIntensity: 0.15,
-    roughness: 0.9, metalness: 0.0,
-  });
-  const log1 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.6, 5), logMat);
-  log1.position.set(0, 0.12, 0); log1.rotation.z = Math.PI/2; log1.rotation.y = 0.3;
-  g.add(log1);
-  const log2 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.55, 5), logMat);
-  log2.position.set(0, 0.14, 0); log2.rotation.z = Math.PI/2; log2.rotation.y = -0.4;
-  g.add(log2);
-  const log3 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.5, 5), logMat);
-  log3.position.set(0, 0.18, 0); log3.rotation.x = Math.PI/2; log3.rotation.z = 0.5;
-  g.add(log3);
-
-  // Chamas — Partículas com Points
-  const flameCount = 40;
-  const flamePos = new Float32Array(flameCount * 3);
-  const flameSizes = new Float32Array(flameCount);
-  const flamePhases = new Float32Array(flameCount);
-  for (let i = 0; i < flameCount; i++) {
-    flamePos[i*3] = (Math.random()-0.5)*0.3;
-    flamePos[i*3+1] = 0.1 + Math.random()*0.8;
-    flamePos[i*3+2] = (Math.random()-0.5)*0.3;
-    flameSizes[i] = 3 + Math.random()*5;
-    flamePhases[i] = Math.random()*Math.PI*2;
-  }
-  const flameGeo = new THREE.BufferGeometry();
-  flameGeo.setAttribute('position', new THREE.BufferAttribute(flamePos, 3));
-  flameGeo.setAttribute('aSize', new THREE.BufferAttribute(flameSizes, 1));
-  flameGeo.setAttribute('aPhase', new THREE.BufferAttribute(flamePhases, 1));
-
-  const flameMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 } },
-    vertexShader: `
-      attribute float aSize; attribute float aPhase;
-      uniform float uTime;
-      varying float vHeight; varying float vAlpha;
-      void main() {
-        vec3 pos = position;
-        float t = mod(uTime * 1.5 + aPhase, 1.5);
-        pos.y = 0.1 + t * 0.7;
-        pos.x += sin(uTime * 3.0 + aPhase * 5.0) * 0.08 * t;
-        pos.z += cos(uTime * 2.5 + aPhase * 4.0) * 0.06 * t;
-        vHeight = t / 1.5;
-        vAlpha = 1.0 - vHeight;
-        vAlpha *= vAlpha;
-        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = aSize * (1.0 - vHeight * 0.5) * (200.0 / -mvPos.z);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
-    fragmentShader: `
-      varying float vHeight; varying float vAlpha;
-      void main() {
-        float d = length(gl_PointCoord - vec2(0.5));
-        if (d > 0.5) discard;
-        float soft = 1.0 - d * 2.0;
-        vec3 color = mix(vec3(1.0, 0.9, 0.2), vec3(1.0, 0.2, 0.0), vHeight);
-        color = mix(color, vec3(0.3, 0.05, 0.0), vHeight * vHeight);
-        gl_FragColor = vec4(color, soft * vAlpha * 0.9);
-      }
-    `,
-  });
-  const flames = new THREE.Points(flameGeo, flameMat);
-  flames.name = 'campfire-flames';
-  g.add(flames);
-
-  // PointLight quente pulsante
-  const fireLight = new THREE.PointLight(0xff6622, 2.0, 8);
-  fireLight.position.set(0, 0.5, 0);
-  fireLight.name = 'campfire-light';
-  g.add(fireLight);
-
-  // Fumo (partículas subtis cinzentas acima)
-  const smokeCount = 15;
-  const smokePos = new Float32Array(smokeCount * 3);
-  const smokePhases = new Float32Array(smokeCount);
-  for (let i = 0; i < smokeCount; i++) {
-    smokePos[i*3] = (Math.random()-0.5)*0.2;
-    smokePos[i*3+1] = 0.8 + Math.random()*1.5;
-    smokePos[i*3+2] = (Math.random()-0.5)*0.2;
-    smokePhases[i] = Math.random()*Math.PI*2;
-  }
-  const smokeGeo = new THREE.BufferGeometry();
-  smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
-  smokeGeo.setAttribute('aPhase', new THREE.BufferAttribute(smokePhases, 1));
-  const smokeMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false,
-    uniforms: { uTime: { value: 0 } },
-    vertexShader: `
-      attribute float aPhase; uniform float uTime; varying float vAlpha;
-      void main() {
-        vec3 pos = position;
-        float t = mod(uTime * 0.4 + aPhase, 3.0);
-        pos.y = 0.8 + t * 1.0;
-        pos.x += sin(uTime*0.8+aPhase*3.0)*0.15*t;
-        vAlpha = (1.0 - t/3.0) * 0.25;
-        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = (5.0 + t*4.0) * (150.0 / -mvPos.z);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
-    fragmentShader: `
-      varying float vAlpha;
-      void main() {
-        float d = length(gl_PointCoord - vec2(0.5));
-        if (d > 0.5) discard;
-        float soft = 1.0 - d * 2.0;
-        gl_FragColor = vec4(0.4, 0.38, 0.35, soft * vAlpha);
-      }
-    `,
-  });
-  const smoke = new THREE.Points(smokeGeo, smokeMat);
-  smoke.name = 'campfire-smoke';
-  g.add(smoke);
-
-  g.position.set(x, 0, z);
-  return g;
-}
 
 /** ❄️ Aurora Boreal — Shader GLSL avançado no céu */
 function createAuroraBorealis() {
@@ -895,15 +750,11 @@ function buildForestBiome(complexGroup, half) {
 
   const m = half + 1.5;
   [[-m,-m,1],[- m,m-2,.9],[m,-m+1,1.1],[m,m,.85],[-m-1,0,.95],[m+1,0,1.05],[-m+.5,m+2,.7],[m-.5,-m-2,.75]].forEach(([x,z,s], i) => complexGroup.add(createTree(x, z, s, i%2===0)));
-  [[-m+3,-m+1,1.2],[m-2,m-2,1],[-3,-m+.5,.8],[5,m-.5,1.1],[-m+1,4,.9],[m-1,-3,1.3],[-6,-6,1],[4,4,.9]].forEach(([x,z,s]) => complexGroup.add(createMushroom(x, z, s)));
+  [[-m+3,-m+1,1.2],[m-2,m-2,1],[-3,-m+.5,.8],[5,m-.5,1.1],[-m+1,4,.9]].forEach(([x,z,s]) => complexGroup.add(createMushroom(x, z, s)));
   complexGroup.add(createFallenLog(-m+2, -4, 0.3));
   complexGroup.add(createFallenLog(m-3, 5, -0.5));
-  complexGroup.add(createFallenLog(2, -m+1, 1.2));
-  [[-m+1,-2,1],[m-1,3,1.2],[-5,m-1,.8],[6,-m+1,1.1],[-m,6,.9],[m,-5,1]].forEach(([x,z,s]) => complexGroup.add(createFern(x, z, s)));
-  [[-m+2,2,1.3],[m-1.5,-6,1],[-4,m-1,.8],[3,-m+2,1.1],[-7,5,.9],[8,3,1.2]].forEach(([x,z,s]) => complexGroup.add(createMossyRock(x, z, s)));
-
-  // ── Cascata com shader (decoração complexa do bioma) ──
-  complexGroup.add(createWaterfall(-m-0.5, 0));
+  [[-m+1,-2,1],[m-1,3,1.2],[-5,m-1,.8],[6,-m+1,1.1]].forEach(([x,z,s]) => complexGroup.add(createFern(x, z, s)));
+  [[-m+2,2,1.3],[m-1.5,-6,1],[-4,m-1,.8],[3,-m+2,1.1]].forEach(([x,z,s]) => complexGroup.add(createMossyRock(x, z, s)));
 
   // Névoa atmosférica
   const fog = createAtmosphericEffect('#225533', '#44aa44', 0.2, 28, 28);
@@ -1020,8 +871,7 @@ function buildDesertBiome(complexGroup, half) {
     complexGroup.add(s);
   }
 
-  // ── Fogueira (decoração complexa do bioma) ──
-  complexGroup.add(createCampfire(0, -m+2));
+
 
   // Névoa de poeira
   const fog = createAtmosphericEffect('#aa7744', '#cc9955', 0.15, 28, 28);
@@ -1235,20 +1085,54 @@ export class LevelManager {
   }
 
   _getGroundTexture(biome) {
+    // PBR: Usa texturas importadas (.png) com normal maps e roughness maps procedurais
     switch (biome) {
-      case 'forest': return createForestGroundTexture();
-      case 'desert': return createDesertGroundTexture();
-      case 'snow':   return createSnowGroundTexture();
-      default:       return createForestGroundTexture();
+      case 'forest': return {
+        map: loadImportedTexture('moss_ground_floor', 'textures/moss_ground.png', 5, 5),
+        normalMap: createProceduralNormalMap(256, 2.0, 0.06, 'forest'),
+        roughnessMap: createProceduralRoughnessMap(256, 0.85, 0.1, 'forest'),
+      };
+      case 'desert': return {
+        map: loadImportedTexture('sandstone_floor', 'textures/sandstone.png', 5, 5),
+        normalMap: createProceduralNormalMap(256, 1.5, 0.04, 'desert'),
+        roughnessMap: createProceduralRoughnessMap(256, 0.92, 0.06, 'desert'),
+      };
+      case 'snow': return {
+        map: loadImportedTexture('ice_floor', 'textures/ice.png', 5, 5),
+        normalMap: createProceduralNormalMap(256, 1.0, 0.08, 'snow'),
+        roughnessMap: createProceduralRoughnessMap(256, 0.5, 0.12, 'snow'),
+      };
+      default: return {
+        map: loadImportedTexture('moss_ground_floor', 'textures/moss_ground.png', 5, 5),
+        normalMap: createProceduralNormalMap(256, 2.0, 0.06, 'forest'),
+        roughnessMap: createProceduralRoughnessMap(256, 0.85, 0.1, 'forest'),
+      };
     }
   }
 
   _getWallTexture(biome) {
+    // PBR: Usa texturas importadas (.png) com normal maps nas paredes
     switch (biome) {
-      case 'forest': return createForestWallTexture();
-      case 'desert': return createDesertWallTexture();
-      case 'snow':   return createSnowWallTexture();
-      default:       return createForestWallTexture();
+      case 'forest': return {
+        map: loadImportedTexture('bark_wall', 'textures/bark.png', 3, 1.5),
+        normalMap: createProceduralNormalMap(128, 3.0, 0.1, 'forest'),
+        roughnessMap: createProceduralRoughnessMap(128, 0.9, 0.08, 'forest'),
+      };
+      case 'desert': return {
+        map: loadImportedTexture('sandstone_wall', 'textures/sandstone.png', 3, 1.5),
+        normalMap: createProceduralNormalMap(128, 2.0, 0.07, 'desert'),
+        roughnessMap: createProceduralRoughnessMap(128, 0.95, 0.05, 'desert'),
+      };
+      case 'snow': return {
+        map: loadImportedTexture('ice_wall', 'textures/ice.png', 3, 1.5),
+        normalMap: createProceduralNormalMap(128, 1.5, 0.09, 'snow'),
+        roughnessMap: createProceduralRoughnessMap(128, 0.4, 0.15, 'snow'),
+      };
+      default: return {
+        map: loadImportedTexture('bark_wall', 'textures/bark.png', 3, 1.5),
+        normalMap: createProceduralNormalMap(128, 3.0, 0.1, 'forest'),
+        roughnessMap: createProceduralRoughnessMap(128, 0.9, 0.08, 'forest'),
+      };
     }
   }
 
@@ -1300,11 +1184,15 @@ export class LevelManager {
     // ---- Tabuleiro ----
     const boardWidth = BOARD_SIZE * CELL_SIZE;
     const boardHeight = 0.5;
-    const groundTex = this._getGroundTexture(biome);
+    const groundPBR = this._getGroundTexture(biome);
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(boardWidth, boardHeight, boardWidth),
       new THREE.MeshStandardMaterial({
-        map: groundTex, color: hexToColor(theme.groundColor || '#1a2a10'),
+        map: groundPBR.map,
+        normalMap: groundPBR.normalMap,
+        normalScale: new THREE.Vector2(0.8, 0.8),
+        roughnessMap: groundPBR.roughnessMap,
+        color: hexToColor(theme.groundColor || '#1a2a10'),
         emissive: hexToColor(theme.groundEmissive || '#0a1a05'), emissiveIntensity: 0.08,
         roughness: 0.9, metalness: 0.05,
       })
@@ -1313,11 +1201,15 @@ export class LevelManager {
     board.receiveShadow = true; board.name = 'board-floor';
     this.boardGroup.add(board);
 
-    // ---- Paredes ----
+    // ---- Paredes (PBR: textura importada + normalMap + roughnessMap) ----
     const wallHeight = 1.5, wallThick = 0.5, half = boardWidth*0.5;
-    const wallTex = this._getWallTexture(biome);
+    const wallPBR = this._getWallTexture(biome);
     const wallMat = new THREE.MeshStandardMaterial({
-      map: wallTex, color: hexToColor(theme.wallColor || '#1a2a15'),
+      map: wallPBR.map,
+      normalMap: wallPBR.normalMap,
+      normalScale: new THREE.Vector2(1.0, 1.0),
+      roughnessMap: wallPBR.roughnessMap,
+      color: hexToColor(theme.wallColor || '#1a2a15'),
       emissive: hexToColor(theme.wallEmissive || '#22cc44'), emissiveIntensity: 0.12,
       roughness: 0.7, metalness: 0.15,
     });
@@ -1422,26 +1314,8 @@ export class LevelManager {
       if (child.name === 'fireflies' || child.name === 'sand-particles' || child.name === 'snowflakes') {
         if (child.material?.uniforms) child.material.uniforms.uTime.value = elapsed;
       }
-      // Cascata
-      if (child.name === 'waterfall-water' && child.material?.uniforms) {
-        child.material.uniforms.uTime.value = elapsed;
-      }
-      if (child.name === 'waterfall-bubble') {
-        child.position.y = 0.05 + Math.sin(elapsed*4+child.position.x*10)*0.03;
-      }
-      if (child.name === 'waterfall-light') {
-        child.intensity = 1.2 + Math.sin(elapsed*2)*0.4;
-      }
-      // Fogueira
-      if (child.name === 'campfire-flames' && child.material?.uniforms) {
-        child.material.uniforms.uTime.value = elapsed;
-      }
-      if (child.name === 'campfire-smoke' && child.material?.uniforms) {
-        child.material.uniforms.uTime.value = elapsed;
-      }
-      if (child.name === 'campfire-light') {
-        child.intensity = 1.5 + Math.sin(elapsed*6)*0.5 + Math.sin(elapsed*9)*0.3;
-      }
+
+
       // Aurora
       if (child.name === 'aurora-plane' || child.name === 'aurora-plane-2') {
         if (child.material?.uniforms) child.material.uniforms.uTime.value = elapsed;

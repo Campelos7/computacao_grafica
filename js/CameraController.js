@@ -90,7 +90,11 @@ export class CameraController {
       this.controls.target.lerp(this._followTarget, 0.12);
     } else {
       this._orthoTarget.set(headPos.x, 0, headPos.z);
-      this.controls.target.lerp(this._orthoTarget, 0.15);
+      // Lerp rápido para a câmara ortográfica acompanhar a cobra
+      this.controls.target.lerp(this._orthoTarget, 0.6);
+      // Mover a posição da câmara ortográfica para seguir a cabeça
+      this.ortho.position.x = THREE.MathUtils.lerp(this.ortho.position.x, headPos.x, 0.6);
+      this.ortho.position.z = THREE.MathUtils.lerp(this.ortho.position.z, headPos.z + 0.01, 0.6);
     }
   }
 

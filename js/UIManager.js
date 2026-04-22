@@ -57,6 +57,18 @@ export class UIManager {
 
     // ---- Notification Container ----
     this.notifContainer = document.getElementById('notification-container');
+
+    // ---- Power-up Indicator ----
+    this.hudPowerup = document.getElementById('hud-powerup');
+    this.powerupIcon = document.getElementById('powerup-icon');
+    this.powerupLabel = document.getElementById('powerup-label');
+    this.powerupBar = document.getElementById('powerup-bar');
+
+    // ---- Combo Display ----
+    this.hudCombo = document.getElementById('hud-combo');
+    this.comboText = document.getElementById('combo-text');
+    this.comboMult = document.getElementById('combo-mult');
+    this._comboTimeout = null;
   }
 
   /* ── Loading ── */
@@ -262,6 +274,80 @@ export class UIManager {
     setTimeout(() => {
       if (el.parentNode) el.parentNode.removeChild(el);
     }, duration);
+  }
+
+  /* ── Power-up Indicator ── */
+
+  /**
+   * Mostra o indicador de power-up activo no HUD.
+   * @param {string} type — 'shield', 'speed', etc.
+   */
+  showPowerUp(type) {
+    if (!this.hudPowerup) return;
+    const icons = { shield: '🛡️', speed: '⚡', portal: '🌀' };
+    const labels = { shield: 'SHIELD', speed: 'SPEED', portal: 'PORTAL' };
+    if (this.powerupIcon) this.powerupIcon.textContent = icons[type] || '✨';
+    if (this.powerupLabel) this.powerupLabel.textContent = labels[type] || type.toUpperCase();
+    if (this.powerupBar) this.powerupBar.style.width = '100%';
+    this.hudPowerup.classList.remove('hidden');
+  }
+
+  /**
+   * Actualiza a barra de countdown do power-up.
+   * @param {string} type — tipo do power-up
+   * @param {boolean} active — se está activo
+   * @param {number} [remaining] — segundos restantes (opcional para shield permanente)
+   */
+  updatePowerUpTimer(type, active, remaining) {
+    if (!this.hudPowerup || !active) return;
+    if (remaining != null && this.powerupBar) {
+      const pct = Math.max(0, Math.min(100, (remaining / 10) * 100));
+      this.powerupBar.style.width = `${pct}%`;
+    }
+  }
+
+  /**
+   * Esconde o indicador de power-up.
+   */
+  hidePowerUp() {
+    if (this.hudPowerup) this.hudPowerup.classList.add('hidden');
+  }
+
+  /* ── Combo Display ── */
+
+  /**
+   * Mostra o indicador de combo no HUD com animação.
+   * @param {number} count — número de comidas seguidas
+   * @param {number} multiplier — multiplicador de pontos
+   */
+  showCombo(count, multiplier) {
+    if (!this.hudCombo) return;
+    if (this.comboText) this.comboText.textContent = `COMBO ×${count}`;
+    if (this.comboMult) this.comboMult.textContent = `×${multiplier} PTS`;
+
+    // Re-trigger animation
+    this.hudCombo.classList.remove('hidden');
+    this.hudCombo.style.animation = 'none';
+    // Force reflow
+    void this.hudCombo.offsetHeight;
+    this.hudCombo.style.animation = '';
+
+    // Auto-hide after 3s (reset if called again)
+    if (this._comboTimeout) clearTimeout(this._comboTimeout);
+    this._comboTimeout = setTimeout(() => {
+      this.hideCombo();
+    }, 3000);
+  }
+
+  /**
+   * Esconde o display de combo.
+   */
+  hideCombo() {
+    if (this.hudCombo) this.hudCombo.classList.add('hidden');
+    if (this._comboTimeout) {
+      clearTimeout(this._comboTimeout);
+      this._comboTimeout = null;
+    }
   }
 
   /* ── Helpers ── */
