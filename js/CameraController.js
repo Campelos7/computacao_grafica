@@ -55,20 +55,48 @@ export class CameraController {
 
   /**
    * Alterna entre câmara perspectiva e ortográfica.
-   * Requisito: Toggle suave (tecla C).
+   * Requisito: Toggle suave (tecla C) — transição interpolada.
    */
   switchCamera() {
+    if (this._transitioning) return; // prevenir duplo-click
+
+    // Guardar estado de partida
+    this._transStartPos = this.active.position.clone();
+    this._transStartTarget = this.controls.target.clone();
+
+    // Trocar câmara
     if (this.isPerspective) {
       this.active = this.ortho;
       this.controls.object = this.ortho;
       this.controls.enableRotate = false;
+
+      // Posicionar ortho no target actual antes de transicionar
+      this._transEndPos = new THREE.Vector3(
+        this.controls.target.x,
+        35,
+        this.controls.target.z + 0.01
+      );
+      this._transEndTarget = this.controls.target.clone();
     } else {
       this.active = this.perspective;
       this.controls.object = this.perspective;
       this.controls.enableRotate = true;
+
+      this._transEndPos = this.perspective.position.clone();
+      this._transEndTarget = this.controls.target.clone();
     }
+
     this.isPerspective = !this.isPerspective;
-    this.controls.update();
+    this._transitioning = true;
+    this._transitionAlpha = 0;
+  }
+
+  /**
+   * Smoothstep easing — transição suave sem saltos bruscos.
+   * @param {number} t — valor entre 0 e 1
+   */
+  _smoothstep(t) {
+    return t * t * (3 - 2 * t);
   }
 
   /**
@@ -78,6 +106,8 @@ export class CameraController {
    * @param {THREE.Vector3} direction
    */
   followSnake(headPos, direction) {
+    if (this._transitioning) return; // não seguir durante transição
+
     if (this.isPerspective) {
       this._followBehind.copy(direction).multiplyScalar(-8);
       this._followTarget.set(headPos.x, 0, headPos.z);
@@ -99,9 +129,26 @@ export class CameraController {
   }
 
   /**
-   * Actualizar a cada frame.
+   * Actualizar a cada frame. Processa transição suave se activa.
+   * @param {number} [delta] — tempo desde último frame (s)
    */
-  update() {
+  update(delta) {
+    // ── Transição suave entre câmaras ──
+    if (this._transitioning && delta) {
+      this._transitionAlpha += delta / this._transitionDuration;
+
+      if (this._transitionAlpha >= 1) {
+        this._transitionAlpha = 1;
+        this._transitioning = false;
+      }
+
+      const t = this._smoothstep(Math.min(this._transitionAlpha, 1));
+
+      // Interpolar posição e target
+      this.active.position.lerpVectors(this._transStartPos, this._transEndPos, t);
+      this.controls.target.lerpVectors(this._transStartTarget, this._transEndTarget, t);
+    }
+
     this.controls.update();
   }
 

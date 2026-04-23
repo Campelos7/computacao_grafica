@@ -896,6 +896,135 @@ export class Snake {
     }
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     TRAIL VISUAL — Rasto luminoso atrás da cobra
+     ══════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Emite uma partícula de trail na posição da cabeça.
+   * Chamado a cada game step.
+   */
+  emitTrail() {
+    if (this.dead || !this.segments[0]) return;
+
+    if (!this._trailParticles) this._trailParticles = [];
+    if (!this._trailGeo) {
+      this._trailGeo = new THREE.SphereGeometry(0.08, 4, 3);
+    }
+
+    const skin = SNAKE_SKINS[this.currentSkinIndex];
+    const color = skin ? skin.headEmissive : 0x6600cc;
+
+    const mat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const p = new THREE.Mesh(this._trailGeo, mat);
+    p.position.set(this.segments[0].x, 0.15, this.segments[0].z);
+    p.userData.life = 1.0;
+    p.userData.decay = 0.7;
+    this.scene.add(p);
+    this._trailParticles.push(p);
+
+    // Limitar tamanho do pool
+    while (this._trailParticles.length > 80) {
+      const old = this._trailParticles.shift();
+      this.scene.remove(old);
+      old.material.dispose();
+    }
+  }
+
+  /**
+   * Actualiza as partículas do trail (fade out).
+   * @param {number} delta — tempo desde último frame (s)
+   */
+  updateTrail(delta) {
+    if (!this._trailParticles) return;
+
+    for (let i = this._trailParticles.length - 1; i >= 0; i--) {
+      const p = this._trailParticles[i];
+      p.userData.life -= delta * p.userData.decay;
+      p.material.opacity = Math.max(0, p.userData.life * 0.5);
+      p.scale.setScalar(0.5 + p.userData.life * 0.5);
+
+      if (p.userData.life <= 0) {
+        this.scene.remove(p);
+        p.material.dispose();
+        this._trailParticles.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Limpa todas as partículas do trail.
+   */
+  clearTrail() {
+    if (!this._trailParticles) return;
+    for (const p of this._trailParticles) {
+      this.scene.remove(p);
+      p.material.dispose();
+    }
+    this._trailParticles = [];
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DEATH EXPLOSION — Explosão dramática ao morrer
+     ══════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Cria uma explosão de partículas a partir de todos os segmentos da cobra.
+   * @returns {Array} array de partículas para tracking externo
+   */
+  explode() {
+    const particles = [];
+    const skin = SNAKE_SKINS[this.currentSkinIndex];
+    const colors = [
+      skin ? skin.headColor : 0x8844ff,
+      skin ? skin.bodyColor : 0x6633cc,
+      skin ? skin.headEmissive : 0x6600cc,
+      0xff3333, // vermelho para impacto
+    ];
+
+    const geo = new THREE.SphereGeometry(0.08, 5, 4);
+
+    for (let s = 0; s < this.segments.length; s++) {
+      const seg = this.segments[s];
+      const count = s === 0 ? 12 : 6; // mais partículas na cabeça
+
+      for (let i = 0; i < count; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: colors[Math.floor(Math.random() * colors.length)],
+          transparent: true,
+          opacity: 1,
+        });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.set(seg.x, 0.38, seg.z);
+
+        p.userData.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 6,
+          Math.random() * 5 + 2,
+          (Math.random() - 0.5) * 6
+        );
+        p.userData.life = 1.0;
+        p.userData.decay = 0.8 + Math.random() * 0.4;
+        p.userData.spin = (Math.random() - 0.5) * 10;
+
+        this.scene.add(p);
+        particles.push(p);
+      }
+    }
+
+    // Esconder a cobra
+    this.group.visible = false;
+    if (this.dragonTailGroup) this.dragonTailGroup.visible = false;
+
+    return particles;
+  }
+
   get headPosition() {
     return this.segments[0];
   }

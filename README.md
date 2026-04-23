@@ -18,6 +18,7 @@ Jogo da cobra em 3D com estética retro neon, construído com **Three.js** para 
 | `4` | Toggle Hemisphere Light |
 | `R` | Replay (após Game Over) / Reiniciar (durante jogo) |
 | `M` | Toggle Pós-Processamento (CRT + Bloom + Pixelate) |
+| `P` | Toggle Som (mute/unmute) |
 | `B` | Retroceder replay |
 | `N` | Velocidade do replay (0.5x → 1x → 2x → 4x) |
 | 🖱️ Rato | OrbitControls (rotação da câmara) |
@@ -59,6 +60,10 @@ Jogo da cobra em 3D com estética retro neon, construído com **Three.js** para 
 - **Power-ups**: Velocidade (estrela dourada), Escudo (fresnel shader), Portal (anéis animados)
 - **Obstáculos dinâmicos**: MovingWall (sin oscilação), DisappearingBlock (fade visibilidade)
 - **Pós-processamento retro**: CRT shader (scanlines, curvatura, aberração cromática), UnrealBloomPass, Pixelate shader, Film grain
+- **Sistema de Som**: Web Audio API com sons sintetizados 8-bit (eat, powerup, death, combo, levelUp) + música chiptune
+- **Efeito de Morte**: Explosão de partículas, camera shake, flash vermelho, delay dramático
+- **Trail Visual**: Rasto luminoso atrás da cobra com fade out
+- **Transição de Câmara**: Interpolação suave (smoothstep) entre perspectiva e ortográfica
 - **Menu 3D** com TextGeometry e Raycaster
 - **Ecrã de carregamento** com barra de progresso
 
@@ -70,14 +75,15 @@ computacao_grafica/
 ├── css/style.css           — Tema retro neon
 ├── js/
 │   ├── main.js             — Orquestrador principal
-│   ├── Snake.js            — Cobra 3D com texturas e power-ups
+│   ├── Snake.js            — Cobra 3D com texturas, power-ups, trail e explosão
 │   ├── Food.js             — Comida e power-ups 3D
 │   ├── Obstacles.js        — Obstáculos dinâmicos
 │   ├── LevelManager.js     — Sistema de níveis (JSON)
 │   ├── ReplaySystem.js     — Buffer circular + reprodução
-│   ├── CameraController.js — Câmaras + OrbitControls
+│   ├── CameraController.js — Câmaras + OrbitControls + transição suave
 │   ├── LightManager.js     — 4 tipos de luz + toggle
 │   ├── PostProcessing.js   — CRT + Bloom + Pixelate + Film
+│   ├── SoundManager.js     — Som retro 8-bit (Web Audio API)
 │   ├── UIManager.js        — Gestão da interface
 │   └── utils/helpers.js    — Constantes e utilitários
 ├── models/                 — Modelos GLTF (fallback procedural)

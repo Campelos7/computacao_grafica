@@ -21,6 +21,7 @@ import { LevelManager } from './LevelManager.js';
 import { Obstacles } from './Obstacles.js';
 import { Snake, SNAKE_SKINS } from './snake.js';
 import { Food, ITEM_TYPES } from './food.js';
+import { SoundManager } from './SoundManager.js';
 
 /* ══════════════════════════════════════════════════════════════════════════
    STATES
@@ -72,6 +73,7 @@ const levelMgr = new LevelManager(scene, obstacles, lightMgr, ui);
 const snake = new Snake(scene);
 const food = new Food(scene);
 const replay = new ReplaySystem(ui);
+const sound = new SoundManager();
 const postProc = new PostProcessing(renderer, scene, camCtrl.camera);
 
 ui.setLoadingProgress(5, 'Initializing...');
@@ -83,6 +85,16 @@ let score = 0;
 let stepDuration = 0.15;
 let accumulator = 0;
 let gameTimer = 0;
+
+// ---- Death Effect State ----
+let deathParticles = [];
+let deathShakeTimer = 0;
+let deathSlowMotion = false;
+let deathSlowTimer = 0;
+let deathDelayTimer = 0;
+let pendingGameOver = false;
+const deathFlash = document.getElementById('death-flash');
+const hudSound = document.getElementById('hud-sound');
 const clock = new THREE.Clock();
 
 // ---- Combo System ----
@@ -114,16 +126,25 @@ let hoveredMenu = null;
 
 // ---- 2D Main Menu buttons ----
 ui.btnMenuPlay?.addEventListener('click', () => {
-  if (state === STATES.MENU) startGame();
+  if (state === STATES.MENU) { sound.playMenuSelect(); startGame(); }
 });
 ui.btnMenuLevels?.addEventListener('click', () => {
-  if (state === STATES.MENU) openSubMenu(MENU_PAGES.LEVELS);
+  if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.LEVELS); }
 });
 ui.btnMenuSkins?.addEventListener('click', () => {
-  if (state === STATES.MENU) openSubMenu(MENU_PAGES.SKINS);
+  if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.SKINS); }
 });
 ui.btnMenuSettings?.addEventListener('click', () => {
-  if (state === STATES.MENU) openSubMenu(MENU_PAGES.SETTINGS);
+  if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.SETTINGS); }
+});
+
+// ---- Sound toggle click ----
+hudSound?.addEventListener('click', () => {
+  const muted = sound.toggleMute();
+  if (hudSound) {
+    hudSound.textContent = muted ? '🔇' : '🔊';
+    hudSound.classList.toggle('muted', muted);
+  }
 });
 
 // ---- Ambient Particles ----
@@ -494,6 +515,12 @@ function startGame() {
   comboCount = 0;
   comboTimer = 0;
   lastEatTime = -999;
+  deathParticles = [];
+  deathShakeTimer = 0;
+  deathSlowMotion = false;
+  deathSlowTimer = 0;
+  deathDelayTimer = 0;
+  pendingGameOver = false;
   ui.setScore(score);
   ui.setTimer(0);
   ui.showMenu(false);
@@ -508,11 +535,15 @@ function startGame() {
 
   snake.reset();
   snake.setSkin(selectedSkinIndex);
+  snake.clearTrail();
   replay.clear();
   food.respawn(snake.segments, obstacles.getOccupiedPositions());
 
   stepDuration = levelMgr.speed;
   food.setAvailablePowerups(levelMgr.powerups);
+
+  // Iniciar música de fundo
+  sound.startMusic();
 
   // Reset camera for gameplay (instant jump, bypasses damping)
   camCtrl.controls.enableRotate = true;
@@ -526,17 +557,49 @@ function startGame() {
 }
 
 function handleGameOver() {
-  state = STATES.GAMEOVER;
+  // ── Efeito de morte dramático ──
+  sound.playDeath();
+  sound.stopMusic();
+
+  // Flash vermelho
+  if (deathFlash) {
+    deathFlash.classList.add('active');
+    setTimeout(() => deathFlash.classList.remove('active'), 150);
+  }
+
+  // Explosão de partículas
+  deathParticles = snake.explode();
+  deathShakeTimer = 0.5; // 0.5s de camera shake
+  pendingGameOver = true;
+  deathDelayTimer = 1.4; // delay antes de mostrar overlay
 
   // Atualizar high score
   if (score > highScore) {
     highScore = score;
     localStorage.setItem('snake3d_highscore', highScore.toString());
     ui.setHighScore(highScore);
-    ui.showNotification('🏆 NEW HIGH SCORE!', 'powerup');
   }
+}
 
-  ui.showGameOver(true, score, highScore);
+/** Actualiza partículas da explosão de morte */
+function updateDeathParticles(delta) {
+  for (let i = deathParticles.length - 1; i >= 0; i--) {
+    const p = deathParticles[i];
+    p.userData.life -= delta * p.userData.decay;
+    p.position.add(p.userData.velocity.clone().multiplyScalar(delta));
+    p.userData.velocity.y -= 12 * delta; // gravidade forte
+    p.material.opacity = Math.max(0, p.userData.life);
+    p.scale.setScalar(Math.max(0.1, p.userData.life));
+    p.rotation.x += p.userData.spin * delta;
+    p.rotation.z += p.userData.spin * delta * 0.5;
+
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      p.geometry.dispose();
+      p.material.dispose();
+      deathParticles.splice(i, 1);
+    }
+  }
 }
 
 function returnToMenu() {
@@ -577,6 +640,7 @@ window.addEventListener('keydown', (e) => {
   // Câmara (C)
   if (e.code === 'KeyC') {
     camCtrl.switchCamera();
+    sound.playMenuSelect();
     postProc.setCamera(camCtrl.camera);
     ui.showNotification(camCtrl.isPerspective ? 'PERSPECTIVE CAM' : 'ORTHOGRAPHIC CAM', 'default');
   }
@@ -587,11 +651,21 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit3') { lightMgr.toggle(2); ui.showNotification('POINT LIGHT', 'default'); }
   if (e.code === 'Digit4') { lightMgr.toggle(3); ui.showNotification('HEMISPHERE LIGHT', 'default'); }
 
+  // Som (P)
+  if (e.code === 'KeyP') {
+    const muted = sound.toggleMute();
+    if (hudSound) {
+      hudSound.textContent = muted ? '🔇' : '🔊';
+      hudSound.classList.toggle('muted', muted);
+    }
+    ui.showNotification(`SOM: ${muted ? 'OFF' : 'ON'}`, 'default');
+  }
+
   // Espaço
   if (e.code === 'Space') {
     e.preventDefault();
     if (state === STATES.PLAYING || state === STATES.PAUSED) togglePause();
-    if (state === STATES.MENU && menuPage === MENU_PAGES.MAIN) startGame();
+    if (state === STATES.MENU && menuPage === MENU_PAGES.MAIN) { sound.playMenuSelect(); startGame(); }
     if (state === STATES.GAMEOVER) returnToMenu();
   }
 
@@ -690,7 +764,42 @@ function animate() {
   if (state === STATES.MENU) {
     updatePreviewSnake(elapsed);
 
-    camCtrl.update();
+    camCtrl.update(delta);
+    postProc.update(elapsed, delta);
+    postProc.setCamera(camCtrl.camera);
+    postProc.render();
+    return;
+  }
+
+  // ---- Death effect update ----
+  if (pendingGameOver) {
+    updateDeathParticles(delta);
+
+    // Camera shake
+    if (deathShakeTimer > 0) {
+      deathShakeTimer -= delta;
+      const intensity = deathShakeTimer * 0.8;
+      camCtrl.camera.position.x += Math.sin(elapsed * 50) * intensity;
+      camCtrl.camera.position.z += Math.cos(elapsed * 40) * intensity;
+    }
+
+    deathDelayTimer -= delta;
+    if (deathDelayTimer <= 0 && pendingGameOver) {
+      pendingGameOver = false;
+      state = STATES.GAMEOVER;
+      if (score > highScore) {
+        ui.showNotification('🏆 NEW HIGH SCORE!', 'powerup');
+      }
+      ui.showGameOver(true, score, highScore);
+    }
+
+    // Continuar a renderizar durante a morte
+    camCtrl.update(delta);
+    food.updateParticles(delta);
+    obstacles.update(elapsed, delta);
+    levelMgr.updateDecorations(elapsed);
+    lightMgr.pulsePointLight(elapsed);
+    lightMgr.pulseHemisphere(elapsed);
     postProc.update(elapsed, delta);
     postProc.setCamera(camCtrl.camera);
     postProc.render();
@@ -733,6 +842,7 @@ function animate() {
 
       if (result.ate) {
         const itemType = food.type;
+        sound.playEat();
 
         // Combo: só activa quando se come 2 comidas num intervalo curto
         const now = clock.elapsedTime;
@@ -753,11 +863,13 @@ function animate() {
 
         if (itemType === ITEM_TYPES.SHIELD) {
           snake.activateShield();
+          sound.playPowerup();
           ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
           ui.showPowerUp('shield');
         } else if (itemType === ITEM_TYPES.PORTAL) {
           const safePos = new THREE.Vector3(0, 0, 0);
           snake.segments[0].copy(safePos);
+          sound.playPowerup();
           ui.showNotification('🌀 PORTAL TELEPORT!', 'powerup');
         } else {
           const pts = Math.floor(1 * comboMult);
@@ -775,6 +887,7 @@ function animate() {
 
         // Mostrar combo se >= 2
         if (comboCount >= 2) {
+          sound.playCombo();
           ui.showCombo(comboCount, comboMult);
         }
 
@@ -784,6 +897,7 @@ function animate() {
               stepDuration = newLevel.speed;
               food.setAvailablePowerups(levelMgr.powerups);
               food.respawn(snake.segments, obstacles.getOccupiedPositions());
+              sound.playLevelUp();
               ui.showNotification('LEVEL UP!', 'powerup');
             }
           });
@@ -791,6 +905,9 @@ function animate() {
 
         food.respawn(snake.segments, obstacles.getOccupiedPositions());
       }
+
+      // Emitir trail a cada step
+      snake.emitTrail();
 
       if (result.dead) {
         comboCount = 0;
@@ -811,6 +928,9 @@ function animate() {
     if (frame) renderReplayFrame(frame);
   }
 
+  // ---- Trail update ----
+  snake.updateTrail(delta);
+
   // ---- Continuous animations ----
   const alpha = stepDuration > 0 ? accumulator / stepDuration : 1;
 
@@ -830,7 +950,7 @@ function animate() {
   if (state === STATES.PLAYING || state === STATES.REPLAY) {
     camCtrl.followSnake(snake.headPosition, snake.direction);
   }
-  camCtrl.update();
+  camCtrl.update(delta);
 
   postProc.update(elapsed, delta);
   postProc.setCamera(camCtrl.camera);
