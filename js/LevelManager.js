@@ -1012,6 +1012,18 @@ export class LevelManager {
     this.gltfLoader = new GLTFLoader();
     this.loadedModels = {};
     this.gridHelper = null;
+
+    // Cache de referências para animações (evita traverse() por frame)
+    this._animRefs = {
+      trophyStars: [],
+      trophyRings: [],
+      fogUniformMats: [],
+      particleUniformMats: [],
+      auroraUniformMats: [],
+      pineTips: [],
+      mushroomGlows: [],
+      crystalLights: [],
+    };
   }
 
   async loadConfig(url) {
@@ -1136,13 +1148,18 @@ export class LevelManager {
     }
   }
 
-  _getSkyboxColors(biome) {
-    switch (biome) {
-      case 'forest': return { top: '#0a2010', mid: '#0f2a15', bottom: '#050d08' };
-      case 'desert': return { top: '#1a1020', mid: '#352010', bottom: '#1a0a05' };
-      case 'snow':   return { top: '#0a1530', mid: '#10192a', bottom: '#050a15' };
-      default:       return { top: '#0a2010', mid: '#0f2a15', bottom: '#050d08' };
-    }
+  _getSkyboxColors(biome, theme) {
+    // Derivar cores do skybox a partir do tema para manter coerência com fog/background.
+    // Mantém a estética do bioma, mas deixa o JSON controlar o "tom" principal.
+    const mid = new THREE.Color(theme?.skyboxColor || theme?.background || '#0a0a1a');
+    const fog = new THREE.Color(theme?.fogColor || theme?.background || '#000000');
+
+    // Topo mais escuro (tendência para "night sky")
+    const top = mid.clone().lerp(new THREE.Color(0x000000), biome === 'desert' ? 0.45 : 0.55);
+    // Base aproxima-se do fog para transição natural com a névoa
+    const bottom = fog.clone().lerp(mid, 0.15);
+
+    return { top, mid, bottom };
   }
 
   async loadLevel(levelIndex, skipTransition = false) {
@@ -1174,7 +1191,7 @@ export class LevelManager {
     }
 
     // ---- Skybox gradiente ----
-    const skyColors = this._getSkyboxColors(biome);
+    const skyColors = this._getSkyboxColors(biome, theme);
     this.skyboxMesh = createSkybox(skyColors.top, skyColors.mid, skyColors.bottom);
     this.scene.add(this.skyboxMesh);
     this.scene.background = null; // uso skybox em vez de cor plana
@@ -1245,6 +1262,10 @@ export class LevelManager {
     // ---- Bioma completo (objetos + partículas + decoração shader) ----
     this._buildBiomeEnvironment(biome, half);
 
+    // Otimizações de performance (por nível)
+    this._rebuildAnimRefsCache();
+    this._optimizeComplexShadows();
+
     // ---- Luzes ----
     this.lightManager.applyTheme(theme);
 
@@ -1283,42 +1304,76 @@ export class LevelManager {
   }
 
   updateDecorations(elapsed) {
-    this.decorGroup.traverse(child => {
-      if (child.name === 'trophy-star') { child.rotation.y += 0.02; child.rotation.x = Math.sin(elapsed*2)*0.2; }
-      if (child.name === 'trophy-ring') { child.rotation.z += 0.03; }
-    });
-    this._updateComplexObjects(elapsed);
+    // Decorações GLTF (cacheado)
+    for (const child of this._animRefs.trophyStars) {
+      child.rotation.y += 0.02;
+      child.rotation.x = Math.sin(elapsed * 2) * 0.2;
+    }
+    for (const child of this._animRefs.trophyRings) {
+      child.rotation.z += 0.03;
+    }
+
+    // Ambiente/bioma (cacheado)
+    for (const mat of this._animRefs.fogUniformMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+    for (const mat of this._animRefs.particleUniformMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+    for (const mat of this._animRefs.auroraUniformMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    for (const child of this._animRefs.pineTips) {
+      child.rotation.y += 0.03;
+      child.rotation.x = Math.sin(elapsed * 2) * 0.15;
+      child.scale.setScalar(1 + Math.sin(elapsed * 4) * 0.15);
+    }
+    for (const child of this._animRefs.mushroomGlows) {
+      const m = child.material;
+      if (!m) continue;
+      m.emissiveIntensity = 0.8 + Math.sin(elapsed * 3 + child.position.x * 5) * 0.5;
+      m.opacity = 0.5 + Math.sin(elapsed * 2.5 + child.position.z * 3) * 0.3;
+    }
+    for (const child of this._animRefs.crystalLights) {
+      child.intensity = 0.4 + Math.sin(elapsed * 2.5) * 0.3;
+    }
   }
 
-  _updateComplexObjects(elapsed) {
+  _rebuildAnimRefsCache() {
+    // Reset
+    for (const k of Object.keys(this._animRefs)) this._animRefs[k] = [];
+
+    // Decorações (trophy)
+    this.decorGroup.traverse(child => {
+      if (child.name === 'trophy-star') this._animRefs.trophyStars.push(child);
+      if (child.name === 'trophy-ring') this._animRefs.trophyRings.push(child);
+    });
+
+    // Complexos / bioma
     this.complexGroup.traverse(child => {
-      // Névoa atmosférica
       if (child.name === 'fog-plane' || child.name === 'fog-plane-upper') {
-        if (child.material?.uniforms) child.material.uniforms.uTime.value = elapsed;
+        if (child.material?.uniforms?.uTime) this._animRefs.fogUniformMats.push(child.material);
       }
-      // Pinheiro tips
-      if (child.name === 'pine-tip') {
-        child.rotation.y += 0.03; child.rotation.x = Math.sin(elapsed*2)*0.15;
-        child.scale.setScalar(1+Math.sin(elapsed*4)*0.15);
-      }
-      // Cogumelos bioluminescentes
-      if (child.name === 'mushroom-glow' && child.material) {
-        child.material.emissiveIntensity = 0.8+Math.sin(elapsed*3+child.position.x*5)*0.5;
-        child.material.opacity = 0.5+Math.sin(elapsed*2.5+child.position.z*3)*0.3;
-      }
-      // Cristais de gelo
-      if (child.name === 'crystal-light') {
-        child.intensity = 0.4+Math.sin(elapsed*2.5)*0.3;
-      }
-      // Partículas (fireflies, sand, snow)
       if (child.name === 'fireflies' || child.name === 'sand-particles' || child.name === 'snowflakes') {
-        if (child.material?.uniforms) child.material.uniforms.uTime.value = elapsed;
+        if (child.material?.uniforms?.uTime) this._animRefs.particleUniformMats.push(child.material);
       }
-
-
-      // Aurora
       if (child.name === 'aurora-plane' || child.name === 'aurora-plane-2') {
-        if (child.material?.uniforms) child.material.uniforms.uTime.value = elapsed;
+        if (child.material?.uniforms?.uTime) this._animRefs.auroraUniformMats.push(child.material);
+      }
+      if (child.name === 'pine-tip') this._animRefs.pineTips.push(child);
+      if (child.name === 'mushroom-glow') this._animRefs.mushroomGlows.push(child);
+      if (child.name === 'crystal-light') this._animRefs.crystalLights.push(child);
+    });
+  }
+
+  _optimizeComplexShadows() {
+    // Decorações do bioma costumam ser o grosso da cena: desliga sombras nelas
+    // (mantém a cobra/board/obstacles com sombras para “look” consistente).
+    this.complexGroup.traverse(obj => {
+      if (obj.isMesh) {
+        obj.castShadow = false;
+        obj.receiveShadow = false;
       }
     });
   }

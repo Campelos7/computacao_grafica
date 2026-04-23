@@ -97,6 +97,21 @@ const deathFlash = document.getElementById('death-flash');
 const hudSound = document.getElementById('hud-sound');
 const clock = new THREE.Clock();
 
+function applyLevelVisualTheme(level) {
+  const theme = level?.theme || {};
+  // Exposição (tone mapping) por nível
+  if (theme.exposure != null) {
+    renderer.toneMappingExposure = theme.exposure;
+  } else {
+    renderer.toneMappingExposure = 1.1;
+  }
+
+  // Bloom por nível (PostProcessing)
+  if (theme.bloomStrength != null) {
+    postProc.setBloomStrength(theme.bloomStrength);
+  }
+}
+
 // ---- Combo System ----
 // Combo activa-se apenas quando se come 2 comidas num intervalo curto
 let comboCount = 0;
@@ -177,9 +192,10 @@ async function init() {
     await loadMenuFont();
 
     ui.setLoadingProgress(75, 'Building level...');
-    await levelMgr.loadLevel(0, true); // skip transition on init
+    const initialLevel = await levelMgr.loadLevel(0, true); // skip transition on init
     food.setAvailablePowerups(levelMgr.powerups);
     stepDuration = levelMgr.speed;
+    applyLevelVisualTheme(initialLevel);
 
     ui.setLoadingProgress(85, 'Creating menu...');
     createMenu3D();
@@ -432,6 +448,7 @@ function openSubMenu(page) {
       levelMgr.loadLevel(i, true).then(() => { // skip transition in menu
         food.setAvailablePowerups(levelMgr.powerups);
         stepDuration = levelMgr.speed;
+        applyLevelVisualTheme(levelMgr.currentLevel);
       });
     });
     ui.showPanel('panel-levels', true);
@@ -586,7 +603,8 @@ function updateDeathParticles(delta) {
   for (let i = deathParticles.length - 1; i >= 0; i--) {
     const p = deathParticles[i];
     p.userData.life -= delta * p.userData.decay;
-    p.position.add(p.userData.velocity.clone().multiplyScalar(delta));
+    // Evitar alocação por frame (clone)
+    p.position.addScaledVector(p.userData.velocity, delta);
     p.userData.velocity.y -= 12 * delta; // gravidade forte
     p.material.opacity = Math.max(0, p.userData.life);
     p.scale.setScalar(Math.max(0.1, p.userData.life));
@@ -646,10 +664,10 @@ window.addEventListener('keydown', (e) => {
   }
 
   // Luzes (1-4)
-  if (e.code === 'Digit1') { lightMgr.toggle(0); ui.showNotification('AMBIENT LIGHT', 'default'); }
-  if (e.code === 'Digit2') { lightMgr.toggle(1); ui.showNotification('DIRECTIONAL LIGHT', 'default'); }
+  if (e.code === 'Digit1') { lightMgr.toggle(0); ui.showNotification('DIRECTIONAL LIGHT', 'default'); }
+  if (e.code === 'Digit2') { lightMgr.toggle(1); ui.showNotification('SPOTLIGHT', 'default'); }
   if (e.code === 'Digit3') { lightMgr.toggle(2); ui.showNotification('POINT LIGHT', 'default'); }
-  if (e.code === 'Digit4') { lightMgr.toggle(3); ui.showNotification('HEMISPHERE LIGHT', 'default'); }
+  if (e.code === 'Digit4') { lightMgr.toggle(3); ui.showNotification('AMBIENT LIGHT', 'default'); }
 
   // Som (P)
   if (e.code === 'KeyP') {
@@ -799,7 +817,6 @@ function animate() {
     obstacles.update(elapsed, delta);
     levelMgr.updateDecorations(elapsed);
     lightMgr.pulsePointLight(elapsed);
-    lightMgr.pulseHemisphere(elapsed);
     postProc.update(elapsed, delta);
     postProc.setCamera(camCtrl.camera);
     postProc.render();
@@ -897,6 +914,7 @@ function animate() {
               stepDuration = newLevel.speed;
               food.setAvailablePowerups(levelMgr.powerups);
               food.respawn(snake.segments, obstacles.getOccupiedPositions());
+              applyLevelVisualTheme(newLevel);
               sound.playLevelUp();
               ui.showNotification('LEVEL UP!', 'powerup');
             }
@@ -943,9 +961,11 @@ function animate() {
   obstacles.update(elapsed, delta);
   levelMgr.updateDecorations(elapsed);
 
-  lightMgr.setPointLightPosition(food.cell.x, 1.3, food.cell.z);
+  lightMgr.setPointLightPosition(food.cell.x, 1.8, food.cell.z);
   lightMgr.pulsePointLight(elapsed);
-  lightMgr.pulseHemisphere(elapsed);
+  if (snake.headPosition) {
+    lightMgr.setSpotLightTarget(snake.headPosition.x, 0, snake.headPosition.z);
+  }
 
   if (state === STATES.PLAYING || state === STATES.REPLAY) {
     camCtrl.followSnake(snake.headPosition, snake.direction);

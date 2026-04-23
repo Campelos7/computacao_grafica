@@ -253,7 +253,8 @@ export class Food {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.userData.life -= delta * p.userData.decay;
-      p.position.add(p.userData.velocity.clone().multiplyScalar(delta));
+      // Evitar alocação por frame (clone)
+      p.position.addScaledVector(p.userData.velocity, delta);
       p.userData.velocity.y -= 9.8 * delta; // gravidade
       p.material.opacity = Math.max(0, p.userData.life);
       p.scale.setScalar(p.userData.life);

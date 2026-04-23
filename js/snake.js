@@ -908,6 +908,7 @@ export class Snake {
     if (this.dead || !this.segments[0]) return;
 
     if (!this._trailParticles) this._trailParticles = [];
+    if (!this._trailPool) this._trailPool = [];
     if (!this._trailGeo) {
       this._trailGeo = new THREE.SphereGeometry(0.08, 4, 3);
     }
@@ -915,15 +916,21 @@ export class Snake {
     const skin = SNAKE_SKINS[this.currentSkinIndex];
     const color = skin ? skin.headEmissive : 0x6600cc;
 
-    const mat = new THREE.MeshBasicMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-
-    const p = new THREE.Mesh(this._trailGeo, mat);
+    // Reutilizar meshes/materiais para evitar GC (pool simples)
+    let p = this._trailPool.length > 0 ? this._trailPool.pop() : null;
+    if (!p) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      p = new THREE.Mesh(this._trailGeo, mat);
+    } else {
+      p.material.color.set(color);
+      p.material.opacity = 0.6;
+    }
     p.position.set(this.segments[0].x, 0.15, this.segments[0].z);
     p.userData.life = 1.0;
     p.userData.decay = 0.7;
@@ -934,7 +941,11 @@ export class Snake {
     while (this._trailParticles.length > 80) {
       const old = this._trailParticles.shift();
       this.scene.remove(old);
-      old.material.dispose();
+      // Em vez de destruir, reciclar (com limite de pool)
+      old.userData.life = 0;
+      old.visible = true;
+      if (this._trailPool.length < 120) this._trailPool.push(old);
+      else old.material.dispose();
     }
   }
 
@@ -953,8 +964,13 @@ export class Snake {
 
       if (p.userData.life <= 0) {
         this.scene.remove(p);
-        p.material.dispose();
         this._trailParticles.splice(i, 1);
+        // Reciclar
+        p.scale.setScalar(1);
+        p.material.opacity = 0;
+        if (!this._trailPool) this._trailPool = [];
+        if (this._trailPool.length < 120) this._trailPool.push(p);
+        else p.material.dispose();
       }
     }
   }
@@ -966,7 +982,13 @@ export class Snake {
     if (!this._trailParticles) return;
     for (const p of this._trailParticles) {
       this.scene.remove(p);
-      p.material.dispose();
+      if (!this._trailPool) this._trailPool = [];
+      if (this._trailPool.length < 120) {
+        p.material.opacity = 0;
+        this._trailPool.push(p);
+      } else {
+        p.material.dispose();
+      }
     }
     this._trailParticles = [];
   }
