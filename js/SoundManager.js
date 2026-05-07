@@ -1,7 +1,7 @@
 /* ==========================================================================
    SoundManager.js — Sistema de Som Retro 8-bit
    Usa Web Audio API para gerar sons sintetizados (sem ficheiros externos).
-   Sons: eat, powerup, death, combo, levelUp, menuSelect, menuHover
+   Sons: eat, powerup, death, combo, menuSelect, menuHover
    Música de fundo chiptune com osciladores.
    Toggle mute com tecla P.
    ========================================================================== */
@@ -162,29 +162,21 @@ export class SoundManager {
     });
   }
 
-  /** 🎉 Level Up — fanfarra curta ascendente */
-  playLevelUp() {
+  /** ▶️ Retomar jogo após pausa — bipe curto distinto do menu */
+  playResume() {
     if (!this._ensureContext() || this.muted) return;
     const t = this.ctx.currentTime;
-    const melody = [523, 659, 784, 1047, 1319]; // C5 E5 G5 C6 E6
-
-    melody.forEach((freq, i) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const start = t + i * 0.09;
-
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.2, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
-
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-      osc.start(start);
-      osc.stop(start + 0.2);
-    });
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(660, t);
+    osc.frequency.exponentialRampToValueAtTime(990, t + 0.08);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.12);
   }
 
   /** 🖱️ Menu select — click curto */

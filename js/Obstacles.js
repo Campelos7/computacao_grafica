@@ -6,7 +6,7 @@
    Obstáculos adaptam-se visualmente ao bioma (floresta/deserto/neve).
    ========================================================================== */
 import * as THREE from 'three';
-import { createCanvasTexture } from './utils/helpers.js';
+import { createCanvasTexture, gridToWorldX, gridToWorldZ } from './utils/helpers.js';
 
 /* ── Texturas por bioma ── */
 
@@ -77,6 +77,16 @@ export class Obstacles {
     this.obstacles = [];
     this.currentBiome = 'forest';
     this.obstacleTexture = null;
+    /** Multiplicador global (dificuldade) sobre velocidades de animação. */
+    this.difficultyMult = 1;
+  }
+
+  /**
+   * Afecta moving walls (sin) e ritmo dos blocos que desaparecem.
+   * @param {number} mult — típico 0.6–1.5
+   */
+  setDifficultyMultiplier(mult) {
+    this.difficultyMult = Math.max(0.25, mult);
   }
 
   /**
@@ -96,6 +106,9 @@ export class Obstacles {
           break;
         case 'disappearingBlock':
           this._addDisappearingBlock(cfg);
+          break;
+        case 'staticBlock':
+          this._addStaticBlock(cfg);
           break;
       }
     }
@@ -118,7 +131,9 @@ export class Obstacles {
     });
 
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(cfg.position[0], 0.6, cfg.position[1]);
+    const wx = gridToWorldX(cfg.position[0]);
+    const wz = gridToWorldZ(cfg.position[1]);
+    mesh.position.set(wx, 0.6, wz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = 'moving-wall';
@@ -141,7 +156,9 @@ export class Obstacles {
       axis: cfg.axis || 'x',
       range: cfg.range || 4,
       speed: cfg.speed || 1.5,
-      basePos: new THREE.Vector3(cfg.position[0], 0.6, cfg.position[1]),
+      basePos: new THREE.Vector3(wx, 0.6, wz),
+      gridX: cfg.position[0],
+      gridZ: cfg.position[1],
     });
   }
 
@@ -162,7 +179,9 @@ export class Obstacles {
     });
 
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(cfg.position[0], 0.45, cfg.position[1]);
+    const wx = gridToWorldX(cfg.position[0]);
+    const wz = gridToWorldZ(cfg.position[1]);
+    mesh.position.set(wx, 0.45, wz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = 'disappearing-block';
@@ -172,8 +191,85 @@ export class Obstacles {
       mesh,
       type: 'disappearingBlock',
       interval: cfg.interval || 5,
-      basePos: new THREE.Vector3(cfg.position[0], 0.45, cfg.position[1]),
+      basePos: new THREE.Vector3(wx, 0.45, wz),
+      gridX: cfg.position[0],
+      gridZ: cfg.position[1],
       _visible: true,
+    });
+  }
+
+  /**
+   * Bloco ou parede fixa (modo NORMAL: substitui móveis / a piscar).
+   * @param {{ position: number[], shape?: 'wall'|'cube', axis?: string, range?: number }} cfg
+   */
+  _addStaticBlock(cfg) {
+    const colors = BIOME_OBSTACLE_COLORS[this.currentBiome] || BIOME_OBSTACLE_COLORS.forest;
+    const shape = cfg.shape === 'wall' ? 'wall' : 'cube';
+    const wx = gridToWorldX(cfg.position[0]);
+    const wz = gridToWorldZ(cfg.position[1]);
+
+    if (shape === 'wall') {
+      const geo = new THREE.BoxGeometry(1.8, 1.2, 0.6);
+      const mat = new THREE.MeshStandardMaterial({
+        map: this.obstacleTexture,
+        color: colors.wallColor,
+        emissive: colors.wallEmissive,
+        emissiveIntensity: colors.wallEmissiveIntensity * 0.85,
+        roughness: 0.65,
+        metalness: 0.2,
+        bumpMap: this.obstacleTexture,
+        bumpScale: 0.04,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(wx, 0.6, wz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.name = 'static-wall';
+
+      const edgeGeo = new THREE.BoxGeometry(1.82, 0.05, 0.62);
+      const edgeMat = new THREE.MeshBasicMaterial({
+        color: colors.wallEdge,
+        transparent: true,
+        opacity: 0.55,
+      });
+      const edge = new THREE.Mesh(edgeGeo, edgeMat);
+      edge.position.y = 0.6;
+      mesh.add(edge);
+
+      this.group.add(mesh);
+      this.obstacles.push({
+        mesh,
+        type: 'staticBlock',
+        shape: 'wall',
+        axis: cfg.axis || 'x',
+        range: cfg.range ?? 4,
+        gridX: cfg.position[0],
+        gridZ: cfg.position[1],
+      });
+      return;
+    }
+
+    const geo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+    const mat = new THREE.MeshStandardMaterial({
+      map: this.obstacleTexture,
+      color: colors.blockColor,
+      emissive: colors.blockEmissive,
+      emissiveIntensity: colors.blockEmissiveIntensity * 0.9,
+      roughness: 0.5,
+      metalness: 0.15,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(wx, 0.45, wz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.name = 'static-block';
+    this.group.add(mesh);
+    this.obstacles.push({
+      mesh,
+      type: 'staticBlock',
+      shape: 'cube',
+      gridX: cfg.position[0],
+      gridZ: cfg.position[1],
     });
   }
 
@@ -181,21 +277,25 @@ export class Obstacles {
    * Actualiza todos os obstáculos.
    */
   update(elapsed, delta) {
+    const dm = this.difficultyMult;
+    const tObs = elapsed * dm;
     for (const obs of this.obstacles) {
+      if (obs.type === 'staticBlock') continue;
+
       if (obs.type === 'movingWall') {
-        const offset = Math.sin(elapsed * obs.speed) * obs.range;
+        const offset = Math.sin(tObs * obs.speed) * obs.range;
         if (obs.axis === 'x') {
           obs.mesh.position.x = obs.basePos.x + offset;
         } else {
           obs.mesh.position.z = obs.basePos.z + offset;
         }
         if (obs.mesh.children[0] && obs.mesh.children[0].material) {
-          obs.mesh.children[0].material.opacity = 0.5 + Math.abs(Math.sin(elapsed * 3)) * 0.5;
+          obs.mesh.children[0].material.opacity = 0.5 + Math.abs(Math.sin(tObs * 3)) * 0.5;
         }
       }
 
       if (obs.type === 'disappearingBlock') {
-        const cycle = elapsed % (obs.interval * 2);
+        const cycle = tObs % (obs.interval * 2);
         const halfInterval = obs.interval;
 
         if (cycle < halfInterval) {
@@ -221,18 +321,31 @@ export class Obstacles {
    * Verifica colisão com um ponto.
    */
   checkCollision(position) {
+    const hx = gridToWorldX(position.x);
+    const hz = gridToWorldZ(position.z);
     for (const obs of this.obstacles) {
       if (obs.type === 'movingWall') {
         const wx = obs.mesh.position.x;
         const wz = obs.mesh.position.z;
-        if (Math.abs(position.x - wx) < 1.0 && Math.abs(position.z - wz) < 0.4) {
+        if (Math.abs(hx - wx) < 1.0 && Math.abs(hz - wz) < 0.4) {
           return true;
+        }
+      }
+      if (obs.type === 'staticBlock') {
+        if (obs.shape === 'wall') {
+          const wx = obs.mesh.position.x;
+          const wz = obs.mesh.position.z;
+          if (Math.abs(hx - wx) < 1.0 && Math.abs(hz - wz) < 0.4) return true;
+        } else {
+          const bx = obs.mesh.position.x;
+          const bz = obs.mesh.position.z;
+          if (Math.abs(hx - bx) < 0.5 && Math.abs(hz - bz) < 0.5) return true;
         }
       }
       if (obs.type === 'disappearingBlock' && obs._visible) {
         const bx = obs.mesh.position.x;
         const bz = obs.mesh.position.z;
-        if (Math.abs(position.x - bx) < 0.5 && Math.abs(position.z - bz) < 0.5) {
+        if (Math.abs(hx - bx) < 0.5 && Math.abs(hz - bz) < 0.5) {
           return true;
         }
       }
@@ -246,14 +359,22 @@ export class Obstacles {
   getOccupiedPositions() {
     const positions = [];
     for (const obs of this.obstacles) {
-      const p = obs.mesh.position;
-      positions.push({ x: Math.round(p.x), z: Math.round(p.z) });
+      positions.push({ x: obs.gridX, z: obs.gridZ });
       if (obs.type === 'movingWall') {
         for (let i = -obs.range; i <= obs.range; i++) {
           if (obs.axis === 'x') {
-            positions.push({ x: Math.round(obs.basePos.x + i), z: Math.round(obs.basePos.z) });
+            positions.push({ x: obs.gridX + i, z: obs.gridZ });
           } else {
-            positions.push({ x: Math.round(obs.basePos.x), z: Math.round(obs.basePos.z + i) });
+            positions.push({ x: obs.gridX, z: obs.gridZ + i });
+          }
+        }
+      }
+      if (obs.type === 'staticBlock' && obs.shape === 'wall') {
+        for (let i = -obs.range; i <= obs.range; i++) {
+          if (obs.axis === 'x') {
+            positions.push({ x: obs.gridX + i, z: obs.gridZ });
+          } else {
+            positions.push({ x: obs.gridX, z: obs.gridZ + i });
           }
         }
       }

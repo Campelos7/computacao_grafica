@@ -18,7 +18,7 @@
     </script>
 </head>
 
-<body>
+<body class="ui-scale-100">
 
   <!-- LOADING SCREEN -->
   <div id="loading-screen">
@@ -66,8 +66,14 @@
     <div id="hud-combo" class="hud-combo hidden">
       <div class="combo-text" id="combo-text">COMBO x2</div>
       <div class="combo-mult" id="combo-mult">×1.5 PTS</div>
+      <div class="combo-bar-bg" aria-hidden="true">
+        <div class="combo-bar" id="combo-bar"></div>
+      </div>
     </div>
   </div>
+
+  <!-- Countdown GO (início da ronda) -->
+  <div id="round-countdown" class="round-countdown hidden" aria-live="polite"></div>
 
   <!-- LIGHT STATUS INDICATORS -->
   <div id="light-indicators">
@@ -91,9 +97,10 @@
 
   <!-- PAUSE OVERLAY -->
   <div id="pause-overlay">
-    <div>
+    <div class="pause-inner">
       <div class="pause-text">PAUSED</div>
-      <div class="pause-sub">Press SPACE to resume<br>Use mouse to orbit camera</div>
+      <div class="pause-sub">Press SPACE to resume · Click MENU to quit<br>Use mouse to orbit camera</div>
+      <button type="button" class="menu-btn pause-menu-btn" id="btn-pause-menu" title="Voltar ao menu principal">MENU</button>
     </div>
   </div>
 
@@ -146,6 +153,7 @@
     <div class="menu-actions">
       <button class="menu-btn primary" id="btn-menu-play">PLAY</button>
       <button class="menu-btn" id="btn-menu-levels">LEVELS</button>
+      <button class="menu-btn" id="btn-menu-difficulty">DIFFICULTY</button>
       <button class="menu-btn" id="btn-menu-skins">SKINS</button>
       <button class="menu-btn" id="btn-menu-settings">SETTINGS</button>
     </div>
@@ -161,6 +169,16 @@
       <!-- Populated dynamically by main.js -->
     </div>
     <button class="menu-panel-back" id="btn-back-levels">← BACK</button>
+  </div>
+
+  <!-- ================================================================
+         SUB-MENU: DIFFICULTY
+         ================================================================ -->
+  <div id="panel-difficulty" class="menu-panel">
+    <div class="menu-panel-title">DIFFICULTY</div>
+    <p class="difficulty-intro">Afecta a velocidade da cobra e dos obstáculos (independente do mapa). Em NORMAL os obstáculos são fixos; em DIFÍCIL movem-se ou piscam.</p>
+    <div class="difficulty-grid" id="difficulty-grid"></div>
+    <button class="menu-panel-back" id="btn-back-difficulty">← BACK</button>
   </div>
 
   <!-- ================================================================
@@ -189,9 +207,20 @@
         <span class="setting-value active" id="setting-shadows">ON</span>
       </div>
       <div class="setting-row">
-        <span class="setting-label">CONTROLS</span>
-        <span class="setting-value" style="cursor:default;border:none;font-size:7px;color:rgba(200,200,255,0.5)">WASD /
-          Arrows + Mouse</span>
+        <span class="setting-label">UI SCALE</span>
+        <span class="setting-value active" id="setting-ui-scale" title="Tamanho do HUD e menus">100%</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">MAX FPS</span>
+        <span class="setting-value active" id="setting-max-fps" title="Limita taxa de atualização (VSync depende do browser)">OFF</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">CHÃO / GRELHA</span>
+        <span class="setting-value" id="setting-high-contrast-floor" title="Grelha e chão mais legíveis (daltonismo / 3D)">OFF</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">TECLAS</span>
+        <span class="setting-value active" id="setting-keys-mode" title="WASD+setas ou só setas">WASD+SETAS</span>
       </div>
     </div>
     <button class="menu-panel-back" id="btn-back-settings">← BACK</button>

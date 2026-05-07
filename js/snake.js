@@ -5,7 +5,15 @@
    + texturas. Movimento suave com interpolação (lerp).
    ========================================================================== */
 import * as THREE from 'three';
-import { BOARD_SIZE, HALF_BOARD, DIRS, createCanvasTexture } from './utils/helpers.js';
+import {
+  BOARD_SIZE,
+  HALF_BOARD,
+  DIRS,
+  createCanvasTexture,
+  gridToWorldX,
+  gridToWorldZ,
+  SHIELD_DURATION_SECONDS,
+} from './utils/helpers.js';
 
 /* ── Textura pixel-art neon para a pele da cobra ── */
 function createNeonSkinTexture() {
@@ -520,16 +528,16 @@ export class Snake {
       bumpScale: 0.04,
     });
 
-    // Estado do escudo (power-up)
+    // Estado do escudo (power-up): activo durante shieldTimeRemaining segundos
     this.shieldActive = false;
+    this.shieldTimeRemaining = 0;
     this.shieldMesh = null;
 
-    // Velocidade boost (power-up)
-    this.speedMultiplier = 1;
-    this.speedTimer = 0;
 
     // Cauda do dragão (gerida separadamente, como o escudo)
     this.dragonTailGroup = null;
+
+    this._headWorld = new THREE.Vector3();
 
     this.reset();
   }
@@ -575,8 +583,7 @@ export class Snake {
     this.growPending = 0;
     this.dead = false;
     this.shieldActive = false;
-    this.speedMultiplier = 1;
-    this.speedTimer = 0;
+    this.shieldTimeRemaining = 0;
     this._removeShieldVisual();
 
     // Recriar cauda ao reiniciar
@@ -651,12 +658,11 @@ export class Snake {
 
     if (collision) {
       if (this.shieldActive) {
+        this.segments.shift();
+        this.segments.unshift(this.previousSegments[0].clone());
         this.shieldActive = false;
+        this.shieldTimeRemaining = 0;
         this._removeShieldVisual();
-        if (hitWall) {
-          this.segments.shift();
-          this.segments.unshift(this.previousSegments[0].clone());
-        }
       } else {
         this.dead = true;
       }
@@ -691,11 +697,22 @@ export class Snake {
 
   /* ── Renderização com interpolação ── */
   /**
+   * Mesmo blend que os meshes: ease suave entre células (evita sensação de “passo seco”).
+   * @param {number} alpha — progresso bruto do passo [0, 1]
+   */
+  _motionBlendT(alpha) {
+    const a = THREE.MathUtils.clamp(alpha, 0, 1);
+    return a * a * (3 - 2 * a);
+  }
+
+  /* ── Renderização com interpolação ── */
+  /**
    * Requisito: Movimento suave com interpolação (lerp).
    * @param {number} alpha — factor de interpolação [0, 1]
    */
   render(alpha) {
     const now = performance.now();
+    const t = this._motionBlendT(alpha);
 
     for (let i = 0; i < this.segments.length; i++) {
       const target = this.segments[i];
@@ -704,9 +721,9 @@ export class Snake {
       if (!mesh) continue;
 
       mesh.position.set(
-        THREE.MathUtils.lerp(prev.x, target.x, alpha),
+        THREE.MathUtils.lerp(gridToWorldX(prev.x), gridToWorldX(target.x), t),
         0.38,
-        THREE.MathUtils.lerp(prev.z, target.z, alpha)
+        THREE.MathUtils.lerp(gridToWorldZ(prev.z), gridToWorldZ(target.z), t)
       );
 
       if (i === 0) {
@@ -748,9 +765,9 @@ export class Snake {
 
       // Posição interpolada do último segmento
       this.dragonTailGroup.position.set(
-        THREE.MathUtils.lerp(prevSeg.x, lastSeg.x, alpha),
+        THREE.MathUtils.lerp(gridToWorldX(prevSeg.x), gridToWorldX(lastSeg.x), t),
         0,
-        THREE.MathUtils.lerp(prevSeg.z, lastSeg.z, alpha)
+        THREE.MathUtils.lerp(gridToWorldZ(prevSeg.z), gridToWorldZ(lastSeg.z), t)
       );
 
       // Orientar a cauda para apontar para fora do corpo da cobra
@@ -805,6 +822,7 @@ export class Snake {
    */
   activateShield() {
     this.shieldActive = true;
+    this.shieldTimeRemaining = SHIELD_DURATION_SECONDS;
     this._removeShieldVisual();
 
     const shieldMat = new THREE.ShaderMaterial({
@@ -848,25 +866,16 @@ export class Snake {
   }
 
   /**
-   * Activa boost de velocidade.
-   * @param {number} duration   — duração em segundos
-   * @param {number} multiplier — multiplicador de velocidade
-   */
-  activateSpeedBoost(duration = 10, multiplier = 2) {
-    this.speedMultiplier = multiplier;
-    this.speedTimer = duration;
-  }
-
-  /**
-   * Actualiza timers de power-ups.
+   * Actualiza animação do escudo (shader).
    * @param {number} delta — tempo desde último tick (s)
    */
   updatePowerUps(delta) {
-    if (this.speedTimer > 0) {
-      this.speedTimer -= delta;
-      if (this.speedTimer <= 0) {
-        this.speedMultiplier = 1;
-        this.speedTimer = 0;
+    if (this.shieldActive && this.shieldTimeRemaining > 0) {
+      this.shieldTimeRemaining -= delta;
+      if (this.shieldTimeRemaining <= 0) {
+        this.shieldTimeRemaining = 0;
+        this.shieldActive = false;
+        this._removeShieldVisual();
       }
     }
     if (this.shieldMesh && this.shieldMesh.material.uniforms) {
@@ -931,7 +940,11 @@ export class Snake {
       p.material.color.set(color);
       p.material.opacity = 0.6;
     }
-    p.position.set(this.segments[0].x, 0.15, this.segments[0].z);
+    p.position.set(
+      gridToWorldX(this.segments[0].x),
+      0.15,
+      gridToWorldZ(this.segments[0].z)
+    );
     p.userData.life = 1.0;
     p.userData.decay = 0.7;
     this.scene.add(p);
@@ -1024,7 +1037,7 @@ export class Snake {
           opacity: 1,
         });
         const p = new THREE.Mesh(geo, mat);
-        p.position.set(seg.x, 0.38, seg.z);
+        p.position.set(gridToWorldX(seg.x), 0.38, gridToWorldZ(seg.z));
 
         p.userData.velocity = new THREE.Vector3(
           (Math.random() - 0.5) * 6,
@@ -1049,5 +1062,28 @@ export class Snake {
 
   get headPosition() {
     return this.segments[0];
+  }
+
+  /** Cabeça no fim do passo (célula alvo), sem interpolação — lógica / replay. */
+  get headWorldPosition() {
+    const s = this.segments[0];
+    this._headWorld.set(gridToWorldX(s.x), s.y, gridToWorldZ(s.z));
+    return this._headWorld;
+  }
+
+  /**
+   * Cabeça alinhada ao mesh interpolado (câmara / spotlight durante o jogo).
+   * @param {number} alpha — mesmo valor que em render(alpha)
+   */
+  getHeadWorldInterpolated(alpha) {
+    const t = this._motionBlendT(alpha);
+    const target = this.segments[0];
+    const prev = this.previousSegments[0] || target;
+    this._headWorld.set(
+      THREE.MathUtils.lerp(gridToWorldX(prev.x), gridToWorldX(target.x), t),
+      0,
+      THREE.MathUtils.lerp(gridToWorldZ(prev.z), gridToWorldZ(target.z), t)
+    );
+    return this._headWorld;
   }
 }

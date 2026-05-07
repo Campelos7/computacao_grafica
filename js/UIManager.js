@@ -3,6 +3,8 @@
    Requisito: UI com feedback visual para luzes, replay, pausas, game over
    ========================================================================== */
 
+import { getSnakeStepDuration } from './utils/helpers.js';
+
 export class UIManager {
   constructor() {
     // ---- Loading Screen ----
@@ -11,16 +13,19 @@ export class UIManager {
     this.loadingText   = document.getElementById('loading-text');
 
     // ---- HUD ----
+    this.hudPanel     = document.getElementById('hud-panel');
     this.hudScore     = document.getElementById('hud-score');
     this.hudLevel     = document.getElementById('hud-level');
     this.hudHighscore = document.getElementById('hud-highscore');
     this.hudTimer     = document.getElementById('hud-timer');
+    this.roundCountdown = document.getElementById('round-countdown');
 
     // ---- Light Indicators ----
     this.lightIndicators = document.querySelectorAll('.light-indicator');
 
     // ---- Overlays ----
     this.pauseOverlay    = document.getElementById('pause-overlay');
+    this.btnPauseMenu    = document.getElementById('btn-pause-menu');
     this.gameoverOverlay = document.getElementById('gameover-overlay');
     this.goScore         = document.getElementById('go-score');
     this.goHighscore     = document.getElementById('go-highscore');
@@ -35,6 +40,7 @@ export class UIManager {
     this.btnMenuLevels   = document.getElementById('btn-menu-levels');
     this.btnMenuSkins    = document.getElementById('btn-menu-skins');
     this.btnMenuSettings = document.getElementById('btn-menu-settings');
+    this.btnMenuDifficulty = document.getElementById('btn-menu-difficulty');
 
     // ---- Sub-menu panels ----
     this.panelLevels   = document.getElementById('panel-levels');
@@ -42,6 +48,7 @@ export class UIManager {
     this.panelSettings = document.getElementById('panel-settings');
     this.levelGrid     = document.getElementById('level-grid');
     this.skinGrid      = document.getElementById('skin-grid');
+    this.difficultyGrid = document.getElementById('difficulty-grid');
 
     // ---- Replay Bar ----
     this.replayBar      = document.getElementById('replay-bar');
@@ -68,7 +75,7 @@ export class UIManager {
     this.hudCombo = document.getElementById('hud-combo');
     this.comboText = document.getElementById('combo-text');
     this.comboMult = document.getElementById('combo-mult');
-    this._comboTimeout = null;
+    this.comboBar = document.getElementById('combo-bar');
   }
 
   /* ── Loading ── */
@@ -171,6 +178,7 @@ export class UIManager {
     this.showPanel('panel-levels', false);
     this.showPanel('panel-skins', false);
     this.showPanel('panel-settings', false);
+    this.showPanel('panel-difficulty', false);
   }
 
   /**
@@ -185,11 +193,13 @@ export class UIManager {
     levels.forEach((level, i) => {
       const card = document.createElement('div');
       card.className = `level-card${i === selectedIndex ? ' selected' : ''}`;
+      const stepN = getSnakeStepDuration(level, 1);
+      const stepsPerSecN = stepN > 0 ? Math.round((1 / stepN) * 10) / 10 : 0;
       card.innerHTML = `
         <div class="lc-num">${level.id}</div>
         <div class="lc-name">${level.name}</div>
         <div class="lc-desc">${level.description || 'Classic snake gameplay'}</div>
-        <div class="lc-speed">SPEED: ${Math.round((1 / level.speed) * 10) / 10}/s</div>
+        <div class="lc-speed">PASSO: ~${stepsPerSecN}/s · NORMAL</div>
       `;
       card.addEventListener('click', () => {
         this.levelGrid.querySelectorAll('.level-card').forEach(c => c.classList.remove('selected'));
@@ -197,6 +207,33 @@ export class UIManager {
         if (onSelect) onSelect(i);
       });
       this.levelGrid.appendChild(card);
+    });
+  }
+
+  /**
+   * Popula o grid de dificuldade (independente do mapa).
+   * @param {Array<{id:string,label:string,snakeStepMult:number,obstacleSpeedMult:number}>} difficulties
+   * @param {number} selectedIndex
+   * @param {Function} onSelect
+   */
+  populateDifficultyGrid(difficulties, selectedIndex, onSelect) {
+    if (!this.difficultyGrid) return;
+    this.difficultyGrid.innerHTML = '';
+    difficulties.forEach((d, i) => {
+      const card = document.createElement('div');
+      card.className = `difficulty-card${i === selectedIndex ? ' selected' : ''}`;
+      const snakePct = Math.round(d.snakeStepMult * 100);
+      const obsPct = Math.round(d.obstacleSpeedMult * 100);
+      card.innerHTML = `
+        <div class="dc-label">${d.label}</div>
+        <div class="dc-hint">Cobra ~${snakePct}% · Obstáculos ~${obsPct}%</div>
+      `;
+      card.addEventListener('click', () => {
+        this.difficultyGrid.querySelectorAll('.difficulty-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        if (onSelect) onSelect(i);
+      });
+      this.difficultyGrid.appendChild(card);
     });
   }
 
@@ -284,8 +321,8 @@ export class UIManager {
    */
   showPowerUp(type) {
     if (!this.hudPowerup) return;
-    const icons = { shield: '🛡️', speed: '⚡', portal: '🌀' };
-    const labels = { shield: 'SHIELD', speed: 'SPEED', portal: 'PORTAL' };
+    const icons = { shield: '🛡️' };
+    const labels = { shield: 'SHIELD' };
     if (this.powerupIcon) this.powerupIcon.textContent = icons[type] || '✨';
     if (this.powerupLabel) this.powerupLabel.textContent = labels[type] || type.toUpperCase();
     if (this.powerupBar) this.powerupBar.style.width = '100%';
@@ -296,12 +333,13 @@ export class UIManager {
    * Actualiza a barra de countdown do power-up.
    * @param {string} type — tipo do power-up
    * @param {boolean} active — se está activo
-   * @param {number} [remaining] — segundos restantes (opcional para shield permanente)
+   * @param {number} [remaining] — segundos restantes
+   * @param {number} [totalDuration] — duração total (para a barra); default 10
    */
-  updatePowerUpTimer(type, active, remaining) {
+  updatePowerUpTimer(type, active, remaining, totalDuration = 10) {
     if (!this.hudPowerup || !active) return;
-    if (remaining != null && this.powerupBar) {
-      const pct = Math.max(0, Math.min(100, (remaining / 10) * 100));
+    if (remaining != null && this.powerupBar && totalDuration > 0) {
+      const pct = Math.max(0, Math.min(100, (remaining / totalDuration) * 100));
       this.powerupBar.style.width = `${pct}%`;
     }
   }
@@ -313,30 +351,29 @@ export class UIManager {
     if (this.hudPowerup) this.hudPowerup.classList.add('hidden');
   }
 
-  /* ── Combo Display ── */
+  /* ── Combo Display (sincronizado com comboTimer em main.js; barra = tempo até perder o multiplicador) ── */
 
   /**
-   * Mostra o indicador de combo no HUD com animação.
-   * @param {number} count — número de comidas seguidas
-   * @param {number} multiplier — multiplicador de pontos
+   * @param {number} count — streak (≥2 mostra HUD)
+   * @param {number} multiplier — multiplicador de pontos mostrado
+   * @param {number} decayRemaining — segundos até expirar (COMBO_DECAY)
+   * @param {number} decayMax — valor total da barra (típico COMBO_DECAY)
    */
-  showCombo(count, multiplier) {
-    if (!this.hudCombo) return;
+  updateComboHud(count, multiplier, decayRemaining, decayMax) {
+    if (!this.hudCombo || count < 2) {
+      this.hideCombo();
+      return;
+    }
     if (this.comboText) this.comboText.textContent = `COMBO ×${count}`;
     if (this.comboMult) this.comboMult.textContent = `×${multiplier} PTS`;
-
-    // Re-trigger animation
+    if (this.comboBar && decayMax > 0) {
+      const pct = Math.max(0, Math.min(100, (decayRemaining / decayMax) * 100));
+      this.comboBar.style.width = `${pct}%`;
+    }
     this.hudCombo.classList.remove('hidden');
     this.hudCombo.style.animation = 'none';
-    // Force reflow
     void this.hudCombo.offsetHeight;
     this.hudCombo.style.animation = '';
-
-    // Auto-hide after 3s (reset if called again)
-    if (this._comboTimeout) clearTimeout(this._comboTimeout);
-    this._comboTimeout = setTimeout(() => {
-      this.hideCombo();
-    }, 3000);
   }
 
   /**
@@ -344,10 +381,34 @@ export class UIManager {
    */
   hideCombo() {
     if (this.hudCombo) this.hudCombo.classList.add('hidden');
-    if (this._comboTimeout) {
-      clearTimeout(this._comboTimeout);
-      this._comboTimeout = null;
+    if (this.comboBar) this.comboBar.style.width = '0%';
+  }
+
+  /* ── Countdown início de ronda ── */
+  setRoundCountdown(remainingSec) {
+    if (!this.roundCountdown) return;
+    if (remainingSec <= 0) {
+      this.hideRoundCountdown();
+      return;
     }
+    this.roundCountdown.classList.remove('hidden');
+    this.roundCountdown.textContent = remainingSec > 0.4 ? String(Math.max(1, Math.ceil(remainingSec - 0.05))) : 'GO';
+  }
+
+  hideRoundCountdown() {
+    if (this.roundCountdown) {
+      this.roundCountdown.classList.add('hidden');
+      this.roundCountdown.textContent = '';
+    }
+  }
+
+  /** Feedback visual ao sair da pausa. */
+  flashHudResume() {
+    if (!this.hudPanel) return;
+    this.hudPanel.classList.remove('resume-flash');
+    void this.hudPanel.offsetHeight;
+    this.hudPanel.classList.add('resume-flash');
+    setTimeout(() => this.hudPanel.classList.remove('resume-flash'), 500);
   }
 
   /* ── Helpers ── */

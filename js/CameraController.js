@@ -5,7 +5,7 @@
    ========================================================================== */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { BOARD_SIZE } from './utils/helpers.js';
+import { BOARD_SIZE, CAMERA } from './config/gameConfig.js';
 
 export class CameraController {
   /**
@@ -15,18 +15,28 @@ export class CameraController {
     const aspect = window.innerWidth / window.innerHeight;
 
     // ---- Requisito: PerspectiveCamera ----
-    this.perspective = new THREE.PerspectiveCamera(60, aspect, 0.1, 200);
-    this.perspective.position.set(0, 18, 14);
+    this.perspective = new THREE.PerspectiveCamera(
+      CAMERA.perspectiveFov,
+      aspect,
+      CAMERA.clipNear,
+      CAMERA.clipFar
+    );
+    this.perspective.position.set(
+      CAMERA.perspectiveInit.x,
+      CAMERA.perspectiveInit.y,
+      CAMERA.perspectiveInit.z
+    );
 
     // ---- Requisito: OrthographicCamera ----
-    const frustum = BOARD_SIZE * 0.65;
+    const frustum = BOARD_SIZE * CAMERA.orthoFrustumBoardFactor;
     this.orthoFrustum = frustum;
     this.ortho = new THREE.OrthographicCamera(
       -frustum * aspect, frustum * aspect,
       frustum, -frustum,
-      0.1, 200
+      CAMERA.clipNear,
+      CAMERA.clipFar
     );
-    this.ortho.position.set(0, 35, 0.01);
+    this.ortho.position.set(CAMERA.orthoInit.x, CAMERA.orthoInit.y, CAMERA.orthoInit.z);
     this.ortho.lookAt(0, 0, 0);
 
     // Estado
@@ -34,16 +44,16 @@ export class CameraController {
     this.isPerspective = true;
     this._transitioning = false;
     this._transitionAlpha = 0;
-    this._transitionDuration = 0.6; // segundos
+    this._transitionDuration = CAMERA.switchDurationSeconds;
 
     // ---- Requisito: OrbitControls para rotação manual ----
     this.controls = new OrbitControls(this.active, domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
+    this.controls.dampingFactor = CAMERA.orbitDamping;
     this.controls.enablePan = false;
-    this.controls.maxPolarAngle = Math.PI * 0.48;
-    this.controls.minDistance = 5;
-    this.controls.maxDistance = 50;
+    this.controls.maxPolarAngle = Math.PI * CAMERA.orbitMaxPolarPiFraction;
+    this.controls.minDistance = CAMERA.orbitMinDistance;
+    this.controls.maxDistance = CAMERA.orbitMaxDistance;
     this.controls.target.set(0, 0, 0);
 
     // Vectores de trabalho (evita alocações por frame)
@@ -73,8 +83,8 @@ export class CameraController {
       // Posicionar ortho no target actual antes de transicionar
       this._transEndPos = new THREE.Vector3(
         this.controls.target.x,
-        35,
-        this.controls.target.z + 0.01
+        CAMERA.orthoInit.y,
+        this.controls.target.z + CAMERA.orthoInit.z
       );
       this._transEndTarget = this.controls.target.clone();
     } else {
@@ -109,22 +119,28 @@ export class CameraController {
     if (this._transitioning) return; // não seguir durante transição
 
     if (this.isPerspective) {
-      this._followBehind.copy(direction).multiplyScalar(-8);
+      this._followBehind.copy(direction).multiplyScalar(-CAMERA.followDistanceBehind);
       this._followTarget.set(headPos.x, 0, headPos.z);
       this._followPos.set(
         this._followTarget.x + this._followBehind.x,
-        14,
+        CAMERA.followCameraHeight,
         this._followTarget.z + this._followBehind.z
       );
-      this.perspective.position.lerp(this._followPos, 0.08);
-      this.controls.target.lerp(this._followTarget, 0.12);
+      this.perspective.position.lerp(this._followPos, CAMERA.followLerpPosition);
+      this.controls.target.lerp(this._followTarget, CAMERA.followLerpTarget);
     } else {
       this._orthoTarget.set(headPos.x, 0, headPos.z);
-      // Lerp rápido para a câmara ortográfica acompanhar a cobra
-      this.controls.target.lerp(this._orthoTarget, 0.6);
-      // Mover a posição da câmara ortográfica para seguir a cabeça
-      this.ortho.position.x = THREE.MathUtils.lerp(this.ortho.position.x, headPos.x, 0.6);
-      this.ortho.position.z = THREE.MathUtils.lerp(this.ortho.position.z, headPos.z + 0.01, 0.6);
+      this.controls.target.lerp(this._orthoTarget, CAMERA.orthoFollowLerp);
+      this.ortho.position.x = THREE.MathUtils.lerp(
+        this.ortho.position.x,
+        headPos.x,
+        CAMERA.orthoFollowLerp
+      );
+      this.ortho.position.z = THREE.MathUtils.lerp(
+        this.ortho.position.z,
+        headPos.z + CAMERA.orthoInit.z,
+        CAMERA.orthoFollowLerp
+      );
     }
   }
 

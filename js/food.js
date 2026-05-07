@@ -1,17 +1,16 @@
 /* ==========================================================================
    Food.js — Comida e Power-ups 3D
    Requisito: Comida com animação de pulso/rotação.
-   Power-ups: Velocidade (estrela dourada), Escudo (esfera), Portal (anéis).
+   Power-up: Escudo (esfera).
    Cada power-up com material animado, partículas ao colectar, notificação UI.
    ========================================================================== */
 import * as THREE from 'three';
-import { HALF_BOARD, randomInt, randomFreePosition, PALETTE } from './utils/helpers.js';
+import { randomFreePosition, gridToWorldX, gridToWorldZ } from './utils/helpers.js';
 
 /* ── Tipos de item ── */
 const ITEM_TYPES = {
   FOOD:   'food',
   SHIELD: 'shield',
-  PORTAL: 'portal',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -28,9 +27,6 @@ export class Food {
     this.cell = new THREE.Vector3(0, 0, 0);
     this.currentType = ITEM_TYPES.FOOD;
     this.mesh = null;
-
-    // Power-up state
-    this.activePowerups = []; // tipos disponíveis no nível actual
 
     // Partículas
     this.particles = [];
@@ -85,34 +81,6 @@ export class Food {
     this.group.add(this.mesh);
   }
 
-  _createPortal() {
-    this._clearMesh();
-
-    // Requisito: Dois anéis animados com shader de distorção
-    const ringGeo = new THREE.TorusGeometry(0.35, 0.06, 12, 32);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0xaa00ff,
-      emissive: 0x8800ff,
-      emissiveIntensity: 1.2,
-      roughness: 0.1,
-      metalness: 0.4,
-      transparent: true,
-      opacity: 0.9,
-    });
-
-    const ring1 = new THREE.Mesh(ringGeo, ringMat);
-    const ring2 = new THREE.Mesh(ringGeo, ringMat.clone());
-    ring1.rotation.x = Math.PI / 2;
-    ring2.rotation.z = Math.PI / 2;
-
-    this.mesh = new THREE.Group();
-    this.mesh.add(ring1, ring2);
-    this.mesh.position.y = 0.55;
-    this.mesh.name = 'portal';
-    this.currentType = ITEM_TYPES.PORTAL;
-    this.group.add(this.mesh);
-  }
-
   _clearMesh() {
     if (this.mesh) {
       this.group.remove(this.mesh);
@@ -120,7 +88,6 @@ export class Food {
       if (this.mesh.material) {
         if (this.mesh.material.dispose) this.mesh.material.dispose();
       }
-      // Se é um Group (portal), limpar filhos
       if (this.mesh.children) {
         this.mesh.children.forEach(c => {
           if (c.geometry) c.geometry.dispose();
@@ -134,44 +101,29 @@ export class Food {
   /* ── Spawn ── */
 
   /**
-   * Gera comida/power-up numa posição livre.
+   * Gera comida ou escudo numa posição livre.
    * @param {Array<THREE.Vector3>} occupiedSegments — segmentos da cobra
    * @param {Array<{x:number,z:number}>} [obstaclePositions] — posições de obstáculos
+   * @param {{ forceShield?: boolean }} [options] — se true, spawna escudo (o jogo decide pela dificuldade)
    */
-  respawn(occupiedSegments, obstaclePositions = []) {
+  respawn(occupiedSegments, obstaclePositions = [], options = {}) {
+    const { forceShield = false } = options;
     const occupied = new Set(occupiedSegments.map(s => `${s.x},${s.z}`));
     obstaclePositions.forEach(p => occupied.add(`${p.x},${p.z}`));
 
     const pos = randomFreePosition(occupied);
     this.cell.copy(pos);
 
-    // Decidir tipo: 75% food, 25% power-up (se disponíveis)
-    const roll = Math.random();
-    if (roll < 0.75 || this.activePowerups.length === 0) {
-      this._createFoodMesh();
+    if (forceShield) {
+      this._createShieldOrb();
     } else {
-      const pType = this.activePowerups[Math.floor(Math.random() * this.activePowerups.length)];
-      switch (pType) {
-        case 'shield': this._createShieldOrb(); break;
-        case 'portal': this._createPortal(); break;
-        default:       this._createFoodMesh();
-      }
+      this._createFoodMesh();
     }
 
-    if (this.mesh) {
-      if (this.mesh.position) {
-        this.mesh.position.x = this.cell.x;
-        this.mesh.position.z = this.cell.z;
-      }
+    if (this.mesh?.position) {
+      this.mesh.position.x = gridToWorldX(this.cell.x);
+      this.mesh.position.z = gridToWorldZ(this.cell.z);
     }
-  }
-
-  /**
-   * Define os power-ups disponíveis para o nível actual.
-   * @param {string[]} types — ex: ['speed', 'shield']
-   */
-  setAvailablePowerups(types) {
-    this.activePowerups = types || [];
   }
 
   /* ── Animação ── */
@@ -200,13 +152,6 @@ export class Food {
         this.mesh.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
         break;
 
-      case ITEM_TYPES.PORTAL:
-        // Anéis: rotação em eixos diferentes
-        if (this.mesh.children[0]) this.mesh.children[0].rotation.z += 0.05;
-        if (this.mesh.children[1]) this.mesh.children[1].rotation.x += 0.04;
-        this.mesh.position.y = 0.55 + Math.sin(elapsed * 1.5) * 0.1;
-        this.mesh.scale.setScalar(1 + Math.sin(elapsed * 4) * 0.12);
-        break;
     }
   }
 
@@ -228,8 +173,7 @@ export class Food {
         opacity: 1,
       });
       const p = new THREE.Mesh(geo, mat);
-      p.position.copy(position);
-      p.position.y = 0.55;
+      p.position.set(gridToWorldX(position.x), 0.55, gridToWorldZ(position.z));
 
       // Velocidade aleatória
       p.userData.velocity = new THREE.Vector3(
@@ -274,7 +218,6 @@ export class Food {
   getCollectColor() {
     switch (this.currentType) {
       case ITEM_TYPES.SHIELD: return 0x00ffff;
-      case ITEM_TYPES.PORTAL: return 0xaa00ff;
       default:                return 0xff00ff;
     }
   }

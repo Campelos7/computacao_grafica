@@ -1,7 +1,7 @@
 /* ==========================================================================
    LevelManager.js — Sistema de Níveis com Biomas Naturais
    Requisito: Ficheiro JSON com temas diferentes (cores, nevoeiro, velocidade,
-   obstáculos). loadLevel() limpa a cena, aplica o tema, gera obstáculos.
+   obstáculos). loadLevel() limpa a cena e aplica o tema; obstáculos vêm de main.applyDifficultySettings().
    Transição suave entre níveis (fade). Importar ≥2 modelos GLTF.
    
    Biomas: Floresta Tropical, Deserto Canyon, Montanha de Neve
@@ -1012,6 +1012,8 @@ export class LevelManager {
     this.gltfLoader = new GLTFLoader();
     this.loadedModels = {};
     this.gridHelper = null;
+    /** Modo acessível: grelha/chão com mais contraste. */
+    this._accessHighContrast = false;
 
     // Cache de referências para animações (evita traverse() por frame)
     this._animRefs = {
@@ -1034,8 +1036,8 @@ export class LevelManager {
     } catch (err) {
       console.warn('Erro ao carregar levelConfig.json, usando nível padrão:', err);
       this.levels = [{
-        id: 1, name: 'DEFAULT', speed: 0.15, boardSize: 20, scoreToAdvance: 999,
-        biome: 'forest', obstacles: [], powerups: [],
+        id: 1, name: 'DEFAULT', pace: 1, boardSize: 20,
+        biome: 'forest', obstacles: [],
         theme: {
           background: '#0a1a0f', fogColor: '#1a3a1a', fogNear: 18, fogFar: 55,
           groundColor: '#1a2a10', groundEmissive: '#0a1a05', gridColor: '#44ff44', gridOpacity: 0.14,
@@ -1252,9 +1254,9 @@ export class LevelManager {
     this.gridHelper.material.transparent = true;
     this.gridHelper.material.opacity = (theme.gridOpacity || 0.15) * 0.5;
     this.scene.add(this.gridHelper);
+    this._applyAccessibilityVisuals();
 
-    // ---- Obstáculos ----
-    this.obstacles.generate(level.obstacles || [], biome);
+    // ---- Obstáculos ---- (gerados em main.applyDifficultySettings após loadLevel)
 
     // ---- Decorações GLTF ----
     this._placeDecorations();
@@ -1268,9 +1270,6 @@ export class LevelManager {
 
     // ---- Luzes ----
     this.lightManager.applyTheme(theme);
-
-    // ---- UI ----
-    this.ui.setLevel(`LEVEL ${level.id}: ${level.name}`);
 
     return level;
   }
@@ -1378,17 +1377,41 @@ export class LevelManager {
     });
   }
 
-  shouldAdvance(score) {
-    return this.currentLevel ? score >= this.currentLevel.scoreToAdvance : false;
+  /** Grelha + chão mais legíveis (ex.: daltonismo / leitura da grelha em 3D). */
+  setHighContrastFloor(enabled) {
+    this._accessHighContrast = !!enabled;
+    this._applyAccessibilityVisuals();
   }
 
-  async advanceLevel() {
-    const nextIndex = this.currentLevelIndex + 1;
-    if (nextIndex >= this.levels.length) return null;
-    return this.loadLevel(nextIndex);
+  _applyAccessibilityVisuals() {
+    const theme = this.currentLevel?.theme || {};
+    const gridMats = this.gridHelper?.material
+      ? (Array.isArray(this.gridHelper.material) ? this.gridHelper.material : [this.gridHelper.material])
+      : [];
+    for (const m of gridMats) {
+      if (!m) continue;
+      if (this._accessHighContrast) {
+        m.color.setHex(0xffff33);
+        m.opacity = 0.5;
+      } else {
+        const gridColor = hexToColor(theme.gridColor || '#44ff44');
+        m.color.copy(gridColor);
+        m.opacity = (theme.gridOpacity || 0.15) * 0.5;
+      }
+    }
+    const floor = this.boardGroup.children.find(c => c.name === 'board-floor');
+    if (floor?.material) {
+      if (this._accessHighContrast) {
+        floor.material.color.setHex(0x1c1c1c);
+        floor.material.emissive.setHex(0x3a3a1a);
+        floor.material.emissiveIntensity = 0.4;
+      } else {
+        floor.material.color.copy(hexToColor(theme.groundColor || '#1a2a10'));
+        floor.material.emissive.copy(hexToColor(theme.groundEmissive || '#0a1a05'));
+        floor.material.emissiveIntensity = 0.08;
+      }
+    }
   }
 
-  get speed() { return this.currentLevel ? this.currentLevel.speed : 0.15; }
-  get powerups() { return this.currentLevel ? (this.currentLevel.powerups || []) : []; }
   get biome() { return this.currentLevel ? (this.currentLevel.biome || 'forest') : 'forest'; }
 }

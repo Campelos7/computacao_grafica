@@ -11,7 +11,27 @@ import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-import { DIRS, BOARD_SIZE } from './utils/helpers.js';
+import {
+  COMBO_WINDOW,
+  COMBO_DECAY,
+  COMBO_MULTIPLIERS,
+  STORAGE_KEYS,
+  RENDER,
+  SCENE_DEFAULTS,
+  ROUND_COUNTDOWN_SECONDS,
+} from './config/gameConfig.js';
+import {
+  DIRS,
+  BOARD_SIZE,
+  gridToWorldX,
+  gridToWorldZ,
+  DIFFICULTY_LEVELS,
+  getShieldSpawnInterval,
+  SHIELD_DURATION_SECONDS,
+  getObstacleConfigsForPlay,
+  getSnakeStepDuration,
+  SNAKE_STEP_REFERENCE_SECONDS,
+} from './utils/helpers.js';
 import { UIManager } from './UIManager.js';
 import { LightManager } from './LightManager.js';
 import { CameraController } from './CameraController.js';
@@ -38,6 +58,7 @@ const STATES = {
 const MENU_PAGES = {
   MAIN: 'main',
   LEVELS: 'levels',
+  DIFFICULTY: 'difficulty',
   SKINS: 'skins',
   SETTINGS: 'settings',
 };
@@ -50,19 +71,23 @@ const app = document.getElementById('app');
 // ---- Renderer ----
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER.pixelRatioMax));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = RENDER.toneMappingExposure;
 renderer.domElement.tabIndex = 1;
 app.appendChild(renderer.domElement);
 
 // ---- Scene ----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a1a);
-scene.fog = new THREE.Fog(0x1a0a2e, 22, 65);
+scene.background = new THREE.Color(SCENE_DEFAULTS.background);
+scene.fog = new THREE.Fog(
+  SCENE_DEFAULTS.fogColor,
+  SCENE_DEFAULTS.fogNear,
+  SCENE_DEFAULTS.fogFar
+);
 
 // ---- Managers ----
 const ui = new UIManager();
@@ -97,13 +122,78 @@ const deathFlash = document.getElementById('death-flash');
 const hudSound = document.getElementById('hud-sound');
 const clock = new THREE.Clock();
 
+/** Ignora pausa / SPACE até passar este instante (evita auto-repeat e tecla “presa” ao iniciar). */
+let gameInputGraceUntil = 0;
+
+/** Segundos até o primeiro passo lógico após PLAY (câmara + input). */
+let roundCountdown = 0;
+
+let lastFpsCapMs = 0;
+
+/** Preferências persistidas (SETTINGS). */
+const appSettings = {
+  uiScale: 100,
+  maxFps: 0,
+  highContrastFloor: false,
+  keysMode: 'both',
+};
+
+function loadAppSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o.uiScale === 100 || o.uiScale === 125) appSettings.uiScale = o.uiScale;
+    if (o.maxFps === 0 || o.maxFps === 30 || o.maxFps === 60) appSettings.maxFps = o.maxFps;
+    if (typeof o.highContrastFloor === 'boolean') appSettings.highContrastFloor = o.highContrastFloor;
+    if (o.keysMode === 'both' || o.keysMode === 'arrows-only') appSettings.keysMode = o.keysMode;
+  } catch (_) { /* ignore */ }
+}
+
+function saveAppSettings() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(appSettings));
+  } catch (_) { /* ignore */ }
+}
+
+function applyAppSettingsToDom() {
+  document.body.classList.remove('ui-scale-100', 'ui-scale-125');
+  document.body.classList.add(appSettings.uiScale >= 125 ? 'ui-scale-125' : 'ui-scale-100');
+  levelMgr.setHighContrastFloor(appSettings.highContrastFloor);
+}
+
+function syncSettingsPanel() {
+  ui.updateSettingToggle('setting-postfx', postProc.enabled);
+  ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
+  const elScale = document.getElementById('setting-ui-scale');
+  if (elScale) {
+    elScale.textContent = `${appSettings.uiScale}%`;
+    elScale.classList.toggle('active', appSettings.uiScale >= 125);
+  }
+  const elFps = document.getElementById('setting-max-fps');
+  if (elFps) {
+    elFps.textContent = appSettings.maxFps === 0 ? 'OFF' : `${appSettings.maxFps}`;
+    elFps.classList.toggle('active', appSettings.maxFps > 0);
+  }
+  const elHc = document.getElementById('setting-high-contrast-floor');
+  if (elHc) {
+    elHc.textContent = appSettings.highContrastFloor ? 'ON' : 'OFF';
+    elHc.classList.toggle('active', appSettings.highContrastFloor);
+  }
+  const elKeys = document.getElementById('setting-keys-mode');
+  if (elKeys) {
+    elKeys.textContent = appSettings.keysMode === 'arrows-only' ? 'SÓ SETAS' : 'WASD+SETAS';
+    elKeys.classList.toggle('active', appSettings.keysMode === 'both');
+  }
+}
+
 function applyLevelVisualTheme(level) {
   const theme = level?.theme || {};
   // Exposição (tone mapping) por nível
   if (theme.exposure != null) {
     renderer.toneMappingExposure = theme.exposure;
   } else {
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = RENDER.toneMappingExposure;
   }
 
   // Bloom por nível (PostProcessing)
@@ -112,21 +202,70 @@ function applyLevelVisualTheme(level) {
   }
 }
 
-// ---- Combo System ----
-// Combo activa-se apenas quando se come 2 comidas num intervalo curto
+// ---- Combo System (parâmetros: js/config/gameConfig.js) ----
 let comboCount = 0;
 let comboTimer = 0;
-let lastEatTime = -999;            // timestamp da última comida
-const COMBO_WINDOW = 2.0;          // segundos — janela para comer outra comida e activar combo
-const COMBO_DECAY  = 3.0;          // segundos — tempo até o combo expirar depois de activado
-const COMBO_MULTIPLIERS = [1, 1, 1.5, 2, 2.5, 3]; // combo 0,1,2,3,4,5+
+let lastEatTime = -999;
 
 // ---- Selections ----
 let selectedLevelIndex = 0;
 let selectedSkinIndex = 0;
 
+function loadStoredDifficultyIndex() {
+  const raw = localStorage.getItem(STORAGE_KEYS.DIFFICULTY);
+  if (raw == null) return 1;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0 || n >= DIFFICULTY_LEVELS.length) return 1;
+  return n;
+}
+
+let selectedDifficultyIndex = loadStoredDifficultyIndex();
+
+/** Maçãs (comida normal) comidas nesta partida — usado para intervalo do escudo. */
+let applesEatenThisRun = 0;
+
+function refreshHudLevelLine() {
+  const lv = levelMgr.currentLevel;
+  if (!lv) return;
+  const diff = DIFFICULTY_LEVELS[selectedDifficultyIndex] ?? DIFFICULTY_LEVELS[1];
+  ui.setLevel(`${lv.name} · ${diff.label}`);
+}
+
+/** Aplica dificuldade: velocidade, animação dos obstáculos, e **quais** obstáculos existem (mapa + modo). */
+function applyDifficultySettings() {
+  const diff = DIFFICULTY_LEVELS[selectedDifficultyIndex] ?? DIFFICULTY_LEVELS[1];
+  const lv = levelMgr.currentLevel;
+  stepDuration = lv ? getSnakeStepDuration(lv, selectedDifficultyIndex) : SNAKE_STEP_REFERENCE_SECONDS * diff.snakeStepMult;
+  obstacles.setDifficultyMultiplier(diff.obstacleSpeedMult);
+
+  if (lv) {
+    const configs = getObstacleConfigsForPlay(lv, selectedDifficultyIndex);
+    obstacles.generate(configs, levelMgr.biome);
+  }
+
+  refreshHudLevelLine();
+}
+
+/**
+ * Após comer um item, spawna o próximo (maçã ou escudo conforme dificuldade).
+ * Intervalos: ver SHIELD_SPAWN_EVERY_N_APPLES em js/config/gameConfig.js.
+ */
+function respawnFoodAfterEat(ateItemType) {
+  if (ateItemType === ITEM_TYPES.FOOD) {
+    applesEatenThisRun++;
+  }
+  const everyN = getShieldSpawnInterval(selectedDifficultyIndex);
+  const forceShield =
+    everyN != null
+    && ateItemType === ITEM_TYPES.FOOD
+    && applesEatenThisRun > 0
+    && applesEatenThisRun % everyN === 0;
+
+  food.respawn(snake.segments, obstacles.getOccupiedPositions(), { forceShield });
+}
+
 // ---- High Score (localStorage) ----
-let highScore = parseInt(localStorage.getItem('snake3d_highscore') || '0', 10);
+let highScore = parseInt(localStorage.getItem(STORAGE_KEYS.HIGHSCORE) || '0', 10);
 ui.setHighScore(highScore);
 
 // ---- 3D Menu ----
@@ -146,11 +285,21 @@ ui.btnMenuPlay?.addEventListener('click', () => {
 ui.btnMenuLevels?.addEventListener('click', () => {
   if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.LEVELS); }
 });
+ui.btnMenuDifficulty?.addEventListener('click', () => {
+  if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.DIFFICULTY); }
+});
 ui.btnMenuSkins?.addEventListener('click', () => {
   if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.SKINS); }
 });
 ui.btnMenuSettings?.addEventListener('click', () => {
   if (state === STATES.MENU) { sound.playMenuSelect(); openSubMenu(MENU_PAGES.SETTINGS); }
+});
+
+ui.btnPauseMenu?.addEventListener('click', () => {
+  if (state === STATES.PAUSED) {
+    sound.playMenuSelect();
+    quitFromPauseToMenu();
+  }
 });
 
 // ---- Sound toggle click ----
@@ -193,8 +342,9 @@ async function init() {
 
     ui.setLoadingProgress(75, 'Building level...');
     const initialLevel = await levelMgr.loadLevel(0, true); // skip transition on init
-    food.setAvailablePowerups(levelMgr.powerups);
-    stepDuration = levelMgr.speed;
+    loadAppSettings();
+    applyAppSettingsToDom();
+    applyDifficultySettings();
     applyLevelVisualTheme(initialLevel);
 
     ui.setLoadingProgress(85, 'Creating menu...');
@@ -446,12 +596,20 @@ function openSubMenu(page) {
     ui.populateLevelGrid(levelMgr.levels, selectedLevelIndex, (i) => {
       selectedLevelIndex = i;
       levelMgr.loadLevel(i, true).then(() => { // skip transition in menu
-        food.setAvailablePowerups(levelMgr.powerups);
-        stepDuration = levelMgr.speed;
+        applyDifficultySettings();
         applyLevelVisualTheme(levelMgr.currentLevel);
       });
     });
     ui.showPanel('panel-levels', true);
+  }
+
+  if (page === MENU_PAGES.DIFFICULTY) {
+    ui.populateDifficultyGrid(DIFFICULTY_LEVELS, selectedDifficultyIndex, (i) => {
+      selectedDifficultyIndex = i;
+      localStorage.setItem(STORAGE_KEYS.DIFFICULTY, String(i));
+      applyDifficultySettings();
+    });
+    ui.showPanel('panel-difficulty', true);
   }
 
   if (page === MENU_PAGES.SKINS) {
@@ -463,8 +621,7 @@ function openSubMenu(page) {
   }
 
   if (page === MENU_PAGES.SETTINGS) {
-    ui.updateSettingToggle('setting-postfx', postProc.enabled);
-    ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
+    syncSettingsPanel();
     ui.showPanel('panel-settings', true);
   }
 }
@@ -504,6 +661,7 @@ function updateMenuRaycaster() {
 function enterMenu() {
   state = STATES.MENU;
   menuPage = MENU_PAGES.MAIN;
+  ui.showPause(false);
   ui.showMenu(true);
   ui.hideAllPanels();
   ui.showPanel('panel-main', true);
@@ -526,6 +684,10 @@ function enterMenu() {
 function startGame() {
   state = STATES.PLAYING;
   menuPage = MENU_PAGES.MAIN;
+  roundCountdown = ROUND_COUNTDOWN_SECONDS;
+  gameInputGraceUntil = performance.now() + 320 + ROUND_COUNTDOWN_SECONDS * 1000;
+  ui.showPause(false);
+  ui.hideRoundCountdown();
   score = 0;
   accumulator = 0;
   gameTimer = 0;
@@ -554,10 +716,11 @@ function startGame() {
   snake.setSkin(selectedSkinIndex);
   snake.clearTrail();
   replay.clear();
-  food.respawn(snake.segments, obstacles.getOccupiedPositions());
+  applesEatenThisRun = 0;
 
-  stepDuration = levelMgr.speed;
-  food.setAvailablePowerups(levelMgr.powerups);
+  // Obstáculos primeiro: respawn da comida deve usar a grelha actual (evita maçã dentro de muro / 1.º passo inválido).
+  applyDifficultySettings();
+  food.respawn(snake.segments, obstacles.getOccupiedPositions(), { forceShield: false });
 
   // Iniciar música de fundo
   sound.startMusic();
@@ -593,7 +756,7 @@ function handleGameOver() {
   // Atualizar high score
   if (score > highScore) {
     highScore = score;
-    localStorage.setItem('snake3d_highscore', highScore.toString());
+    localStorage.setItem(STORAGE_KEYS.HIGHSCORE, highScore.toString());
     ui.setHighScore(highScore);
   }
 }
@@ -622,11 +785,22 @@ function updateDeathParticles(delta) {
 
 function returnToMenu() {
   state = STATES.MENU;
+  ui.showPause(false);
   ui.showGameOver(false);
   enterMenu();
 }
 
+/** Abandona a partida em pausa e volta ao menu principal. */
+function quitFromPauseToMenu() {
+  if (state !== STATES.PAUSED) return;
+  ui.showPause(false);
+  sound.stopMusic();
+  replay.clear();
+  returnToMenu();
+}
+
 function togglePause() {
+  if (performance.now() < gameInputGraceUntil) return;
   if (state === STATES.PLAYING) {
     state = STATES.PAUSED;
     ui.showPause(true);
@@ -634,6 +808,8 @@ function togglePause() {
   } else if (state === STATES.PAUSED) {
     state = STATES.PLAYING;
     ui.showPause(false);
+    sound.playResume();
+    ui.flashHudResume();
   }
 }
 
@@ -644,10 +820,17 @@ function handleMovementKey(event) {
   if (state !== STATES.PLAYING) return false;
   const code = event.code;
   const key = (event.key || '').toLowerCase();
-  if (code === 'ArrowLeft' || key === 'a') { snake.turnLeft(); return true; }
-  if (code === 'ArrowRight' || key === 'd') { snake.turnRight(); return true; }
-  if (code === 'ArrowUp' || key === 'w') { snake.setDirection(DIRS.up); return true; }
-  if (code === 'ArrowDown' || key === 's') { snake.setDirection(DIRS.down); return true; }
+  const arrowsOnly = appSettings.keysMode === 'arrows-only';
+
+  const left = code === 'ArrowLeft' || (!arrowsOnly && (code === 'KeyA' || key === 'a'));
+  const right = code === 'ArrowRight' || (!arrowsOnly && (code === 'KeyD' || key === 'd'));
+  const up = code === 'ArrowUp' || (!arrowsOnly && (code === 'KeyW' || key === 'w'));
+  const down = code === 'ArrowDown' || (!arrowsOnly && (code === 'KeyS' || key === 's'));
+
+  if (left) { snake.turnLeft(); return true; }
+  if (right) { snake.turnRight(); return true; }
+  if (up) { snake.setDirection(DIRS.up); return true; }
+  if (down) { snake.setDirection(DIRS.down); return true; }
   return false;
 }
 
@@ -679,16 +862,22 @@ window.addEventListener('keydown', (e) => {
     ui.showNotification(`SOM: ${muted ? 'OFF' : 'ON'}`, 'default');
   }
 
-  // Espaço
+  // Espaço — em replay trata-se aqui; nos outros estados ignorar auto-repeat (evita PLAY+pausa com tecla presa)
   if (e.code === 'Space') {
     e.preventDefault();
+    if (state === STATES.REPLAY) {
+      replay.togglePlay();
+      return;
+    }
+    if (e.repeat) return;
     if (state === STATES.PLAYING || state === STATES.PAUSED) togglePause();
     if (state === STATES.MENU && menuPage === MENU_PAGES.MAIN) { sound.playMenuSelect(); startGame(); }
     if (state === STATES.GAMEOVER) returnToMenu();
   }
 
-  // Escape — voltar ao menu / fechar sub-menu
+  // Escape — voltar ao menu / fechar sub-menu (sem auto-repeat para não “duplicar” pausa)
   if (e.code === 'Escape') {
+    if (e.repeat) return;
     if (state === STATES.MENU && menuPage !== MENU_PAGES.MAIN) {
       closeSubMenu();
     } else if (state === STATES.PLAYING) {
@@ -724,9 +913,8 @@ window.addEventListener('keydown', (e) => {
     ui.updateSettingToggle('setting-postfx', ppOn);
   }
 
-  // Replay controls
+  // Replay controls (Space já tratado acima)
   if (state === STATES.REPLAY) {
-    if (e.code === 'Space') { e.preventDefault(); replay.togglePlay(); }
     if (e.code === 'KeyB') replay.rewind();
     if (e.code === 'KeyN') replay.cycleSpeed();
   }
@@ -747,6 +935,7 @@ window.addEventListener('pointerdown', (e) => {
 document.getElementById('btn-back-levels')?.addEventListener('click', closeSubMenu);
 document.getElementById('btn-back-skins')?.addEventListener('click', closeSubMenu);
 document.getElementById('btn-back-settings')?.addEventListener('click', closeSubMenu);
+document.getElementById('btn-back-difficulty')?.addEventListener('click', closeSubMenu);
 
 // ---- Settings toggles ----
 document.getElementById('setting-postfx')?.addEventListener('click', () => {
@@ -756,6 +945,38 @@ document.getElementById('setting-postfx')?.addEventListener('click', () => {
 document.getElementById('setting-shadows')?.addEventListener('click', () => {
   renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
   ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
+});
+
+document.getElementById('setting-ui-scale')?.addEventListener('click', () => {
+  if (state !== STATES.MENU) return;
+  appSettings.uiScale = appSettings.uiScale >= 125 ? 100 : 125;
+  applyAppSettingsToDom();
+  saveAppSettings();
+  syncSettingsPanel();
+});
+
+document.getElementById('setting-max-fps')?.addEventListener('click', () => {
+  if (state !== STATES.MENU) return;
+  const cycle = [0, 30, 60];
+  const i = Math.max(0, cycle.indexOf(appSettings.maxFps));
+  appSettings.maxFps = cycle[(i + 1) % cycle.length];
+  saveAppSettings();
+  syncSettingsPanel();
+});
+
+document.getElementById('setting-high-contrast-floor')?.addEventListener('click', () => {
+  if (state !== STATES.MENU) return;
+  appSettings.highContrastFloor = !appSettings.highContrastFloor;
+  applyAppSettingsToDom();
+  saveAppSettings();
+  syncSettingsPanel();
+});
+
+document.getElementById('setting-keys-mode')?.addEventListener('click', () => {
+  if (state !== STATES.MENU) return;
+  appSettings.keysMode = appSettings.keysMode === 'arrows-only' ? 'both' : 'arrows-only';
+  saveAppSettings();
+  syncSettingsPanel();
 });
 
 // ---- Resize ----
@@ -770,8 +991,13 @@ window.addEventListener('resize', () => {
 /* ══════════════════════════════════════════════════════════════════════════
    GAME LOOP
    ══════════════════════════════════════════════════════════════════════════ */
-function animate() {
+function animate(now = performance.now()) {
   requestAnimationFrame(animate);
+  if (appSettings.maxFps > 0) {
+    const ms = 1000 / appSettings.maxFps;
+    if (now - lastFpsCapMs < ms) return;
+    lastFpsCapMs = now;
+  }
   const delta = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
@@ -825,11 +1051,25 @@ function animate() {
 
   // ---- Playing state ----
   if (state === STATES.PLAYING) {
-    gameTimer += delta;
-    ui.setTimer(gameTimer);
+    if (roundCountdown > 0) {
+      roundCountdown -= delta;
+      ui.setRoundCountdown(roundCountdown);
+      if (roundCountdown <= 0) {
+        roundCountdown = 0;
+        ui.hideRoundCountdown();
+        accumulator = 0;
+      }
+    }
 
-    // Combo timer decay — combo expira após COMBO_DECAY segundos
-    if (comboCount > 0) {
+    const inPlay = roundCountdown <= 0;
+
+    if (inPlay) {
+      gameTimer += delta;
+      ui.setTimer(gameTimer);
+    }
+
+    // Combo: decaimento do multiplicador (barra no HUD; ver gameConfig — modelo documentado)
+    if (comboCount > 0 && inPlay) {
       comboTimer -= delta;
       if (comboTimer <= 0) {
         comboCount = 0;
@@ -838,105 +1078,92 @@ function animate() {
       }
     }
 
+    if (comboCount >= 2 && inPlay) {
+      const mult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
+      ui.updateComboHud(comboCount, mult, Math.max(0, comboTimer), COMBO_DECAY);
+    } else if (comboCount < 2) {
+      ui.hideCombo();
+    }
+
     // Power-up timer UI update
     if (snake.shieldActive && snake.shieldMesh) {
-      ui.updatePowerUpTimer('shield', true);
-    }
-    if (snake.speedTimer > 0) {
-      ui.updatePowerUpTimer('speed', true, snake.speedTimer);
-    } else if (!snake.shieldActive) {
+      ui.updatePowerUpTimer(
+        'shield',
+        true,
+        snake.shieldTimeRemaining,
+        SHIELD_DURATION_SECONDS
+      );
+    } else {
       ui.hidePowerUp();
     }
 
     snake.updatePowerUps(delta);
-    const effectiveStep = stepDuration / snake.speedMultiplier;
+    const effectiveStep = stepDuration;
 
-    accumulator += delta;
-    while (accumulator >= effectiveStep) {
-      accumulator -= effectiveStep;
+    if (inPlay) {
+      accumulator += delta;
+      while (accumulator >= effectiveStep) {
+        accumulator -= effectiveStep;
 
-      const result = snake.updateStep(food.cell, (pos) => obstacles.checkCollision(pos));
+        const result = snake.updateStep(food.cell, (pos) => obstacles.checkCollision(pos));
 
-      if (result.ate) {
-        const itemType = food.type;
-        sound.playEat();
+        if (result.ate) {
+          const itemType = food.type;
+          sound.playEat();
 
-        // Combo: só activa quando se come 2 comidas num intervalo curto
-        const now = clock.elapsedTime;
-        const timeSinceLastEat = now - lastEatTime;
-        lastEatTime = now;
+          const nowT = clock.elapsedTime;
+          const timeSinceLastEat = nowT - lastEatTime;
+          lastEatTime = nowT;
 
-        if (timeSinceLastEat <= COMBO_WINDOW) {
-          // Comeu dentro da janela — incrementar combo
-          comboCount++;
-          comboTimer = COMBO_DECAY;
-        } else {
-          // Demorou demais — resetar combo (não perde pontos, apenas o multiplicador)
-          comboCount = 1;  // esta comida conta como a primeira do próximo possível combo
+          if (timeSinceLastEat <= COMBO_WINDOW) {
+            comboCount++;
+            comboTimer = COMBO_DECAY;
+          } else {
+            comboCount = 1;
+            comboTimer = 0;
+            ui.hideCombo();
+          }
+          const comboMult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
+
+          if (itemType === ITEM_TYPES.SHIELD) {
+            snake.activateShield();
+            sound.playPowerup();
+            ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
+            ui.showPowerUp('shield');
+          } else {
+            const pts = Math.floor(1 * comboMult);
+            score += pts;
+            ui.setScore(score);
+          }
+
+          food.emitCollectParticles(food.cell.clone(), food.getCollectColor());
+
+          if (itemType !== ITEM_TYPES.FOOD) {
+            const pts = Math.floor(3 * comboMult);
+            score += pts;
+            ui.setScore(score);
+          }
+
+          if (comboCount >= 2) {
+            sound.playCombo();
+          }
+
+          respawnFoodAfterEat(itemType);
+        }
+
+        snake.emitTrail();
+
+        if (result.dead) {
+          comboCount = 0;
           comboTimer = 0;
+          lastEatTime = -999;
           ui.hideCombo();
-        }
-        const comboMult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
-
-        if (itemType === ITEM_TYPES.SHIELD) {
-          snake.activateShield();
-          sound.playPowerup();
-          ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
-          ui.showPowerUp('shield');
-        } else if (itemType === ITEM_TYPES.PORTAL) {
-          const safePos = new THREE.Vector3(0, 0, 0);
-          snake.segments[0].copy(safePos);
-          sound.playPowerup();
-          ui.showNotification('🌀 PORTAL TELEPORT!', 'powerup');
-        } else {
-          const pts = Math.floor(1 * comboMult);
-          score += pts;
-          ui.setScore(score);
+          ui.hidePowerUp();
+          handleGameOver();
         }
 
-        food.emitCollectParticles(food.cell.clone(), food.getCollectColor());
-
-        if (itemType !== ITEM_TYPES.FOOD) {
-          const pts = Math.floor(3 * comboMult);
-          score += pts;
-          ui.setScore(score);
-        }
-
-        // Mostrar combo se >= 2
-        if (comboCount >= 2) {
-          sound.playCombo();
-          ui.showCombo(comboCount, comboMult);
-        }
-
-        if (levelMgr.shouldAdvance(score)) {
-          levelMgr.advanceLevel().then(newLevel => {
-            if (newLevel) {
-              stepDuration = newLevel.speed;
-              food.setAvailablePowerups(levelMgr.powerups);
-              food.respawn(snake.segments, obstacles.getOccupiedPositions());
-              applyLevelVisualTheme(newLevel);
-              sound.playLevelUp();
-              ui.showNotification('LEVEL UP!', 'powerup');
-            }
-          });
-        }
-
-        food.respawn(snake.segments, obstacles.getOccupiedPositions());
+        replay.record(snake.segments, snake.direction, score);
       }
-
-      // Emitir trail a cada step
-      snake.emitTrail();
-
-      if (result.dead) {
-        comboCount = 0;
-        comboTimer = 0;
-        lastEatTime = -999;
-        ui.hideCombo();
-        ui.hidePowerUp();
-        handleGameOver();
-      }
-
-      replay.record(snake.segments, snake.direction, score);
     }
   }
 
@@ -961,14 +1188,20 @@ function animate() {
   obstacles.update(elapsed, delta);
   levelMgr.updateDecorations(elapsed);
 
-  lightMgr.setPointLightPosition(food.cell.x, 1.8, food.cell.z);
+  lightMgr.setPointLightPosition(gridToWorldX(food.cell.x), 1.8, gridToWorldZ(food.cell.z));
   lightMgr.pulsePointLight(elapsed);
   if (snake.headPosition) {
-    lightMgr.setSpotLightTarget(snake.headPosition.x, 0, snake.headPosition.z);
+    const hw =
+      state === STATES.PLAYING || state === STATES.PAUSED
+        ? snake.getHeadWorldInterpolated(alpha)
+        : snake.headWorldPosition;
+    lightMgr.setSpotLightTarget(hw.x, 0, hw.z);
   }
 
   if (state === STATES.PLAYING || state === STATES.REPLAY) {
-    camCtrl.followSnake(snake.headPosition, snake.direction);
+    const headFollow =
+      state === STATES.PLAYING ? snake.getHeadWorldInterpolated(alpha) : snake.headWorldPosition;
+    camCtrl.followSnake(headFollow, snake.direction);
   }
   camCtrl.update(delta);
 
@@ -1002,7 +1235,7 @@ function renderReplayFrame(frame) {
     const seg = segments[i];
     const mesh = snake.group.children[i];
     if (mesh) {
-      mesh.position.set(seg.x, 0.38, seg.z);
+      mesh.position.set(gridToWorldX(seg.x), 0.38, gridToWorldZ(seg.z));
       if (i === 0) {
         const dir = frame.direction;
         mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
