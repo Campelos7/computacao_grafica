@@ -82,6 +82,14 @@ export class Obstacles {
   }
 
   /**
+   * Mostra/esconde todos os obstáculos (útil para o menu).
+   * @param {boolean} visible
+   */
+  setVisible(visible) {
+    this.group.visible = !!visible;
+  }
+
+  /**
    * Afecta moving walls (sin) e ritmo dos blocos que desaparecem.
    * @param {number} mult — típico 0.6–1.5
    */

@@ -196,12 +196,15 @@ export class PostProcessing {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
-    this.enabled = true; // Pós-processamento ligado por defeito
+    // Performance: Post-FX (bloom + múltiplos shader passes) é a parte mais pesada.
+    // Mantém disponível via tecla M, mas começa desligado.
+    this.enabled = false;
 
     const size = renderer.getSize(new THREE.Vector2());
 
     // ---- Requisito: Pipeline EffectComposer ----
     this.composer = new EffectComposer(renderer);
+    this.composer.setPixelRatio(renderer.getPixelRatio());
 
     // 1. RenderPass — base render
     this.renderPass = new RenderPass(scene, camera);
@@ -210,7 +213,7 @@ export class PostProcessing {
     // 2. UnrealBloomPass — neon glow bloom
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.x, size.y),
-      0.5,   // strength — subtil glow
+      0.35,  // strength — mais leve
       0.4,   // radius
       0.82   // threshold — só materiais muito brilhantes
     );
@@ -224,7 +227,8 @@ export class PostProcessing {
     // 4. ShaderPass (Pixelate) — downsample retro
     this.pixelPass = new ShaderPass(PixelateShader);
     this.pixelPass.uniforms.uResolution.value.set(size.x, size.y);
-    this.pixelPass.uniforms.uPixelSize.value.set(1920, 1080);
+    // Performance: quantização mais grossa = menos detalhe e custo ligeiramente menor.
+    this.pixelPass.uniforms.uPixelSize.value.set(1280, 720);
     this.composer.addPass(this.pixelPass);
 
     // 5. ShaderPass (Film grain)
@@ -289,6 +293,7 @@ export class PostProcessing {
    */
   resize(width, height) {
     this.composer.setSize(width, height);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.crtPass.uniforms.uResolution.value.set(width, height);
     this.pixelPass.uniforms.uResolution.value.set(width, height);
     this.bloomPass.resolution.set(width, height);

@@ -11,6 +11,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { BOARD_SIZE, CELL_SIZE, createCanvasTexture, disposeGroup, hexToColor } from './utils/helpers.js';
+import { buildForestBiome as buildForestBiomeMain } from './level/biomes/forest/index.js';
+import { buildDesertBiome as buildDesertBiomeMain } from './level/biomes/desert/index.js';
+import { buildSnowBiome as buildSnowBiomeMain } from './level/biomes/snow/index.js';
 
 /* ══════════════════════════════════════════════════════════════════════════
    TEXTURAS IMPORTADAS (R1 — obrigatório pelo protocolo)
@@ -39,6 +42,8 @@ function loadImportedTexture(name, path, repeatX = 1, repeatY = 1) {
 
 /** Gera um Normal Map procedural via Canvas (simula relevo com ruído) */
 function createProceduralNormalMap(size, intensity, noiseScale, biomeType) {
+  // Performance: limitar tamanho máximo a 128
+  size = Math.min(size, 128);
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -327,7 +332,7 @@ function createParticleSystem(biome, boardHalf) {
 
   if (biome === 'forest') {
     // ── Pirilampos (Fireflies) ──
-    const count = 40;
+    const count = 20; // Optimizado: reduzido de 40 para performance
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -389,7 +394,7 @@ function createParticleSystem(biome, boardHalf) {
 
   } else if (biome === 'desert') {
     // ── Areia soprada (Sand particles) ──
-    const count = 100;
+    const count = 50; // Optimizado: reduzido de 100 para performance
     const positions = new Float32Array(count * 3);
     const speeds = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -451,7 +456,7 @@ function createParticleSystem(biome, boardHalf) {
 
   } else if (biome === 'snow') {
     // ── Flocos de neve (Snowflakes) ──
-    const count = 120;
+    const count = 60; // Optimizado: reduzido de 120 para performance
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -1028,6 +1033,20 @@ export class LevelManager {
     };
   }
 
+  /**
+   * Menu performance: esconder/mostrar cenário pesado (board + bioma + decorações).
+   * Mantém o estado carregado, só altera visibilidade.
+   * @param {boolean} visible
+   */
+  setEnvironmentVisible(visible) {
+    const v = !!visible;
+    if (this.boardGroup) this.boardGroup.visible = v;
+    if (this.decorGroup) this.decorGroup.visible = v;
+    if (this.complexGroup) this.complexGroup.visible = v;
+    if (this.gridHelper) this.gridHelper.visible = v;
+    if (this.skyboxMesh) this.skyboxMesh.visible = v;
+  }
+
   async loadConfig(url) {
     try {
       const response = await fetch(url);
@@ -1267,6 +1286,7 @@ export class LevelManager {
     // Otimizações de performance (por nível)
     this._rebuildAnimRefsCache();
     this._optimizeComplexShadows();
+    this._freezeStaticComplexTransforms();
 
     // ---- Luzes ----
     this.lightManager.applyTheme(theme);
@@ -1275,11 +1295,19 @@ export class LevelManager {
   }
 
   _buildBiomeEnvironment(biome, half) {
+    // Os biomas modulares do `main` esperam um objeto `helpers` com utilitários
+    // já existentes neste ficheiro (texturas importadas, partículas, efeitos, etc.).
+    const helpers = {
+      loadImportedTexture,
+      createAtmosphericEffect,
+      createParticleSystem,
+      createAuroraBorealis,
+    };
     switch (biome) {
-      case 'forest': buildForestBiome(this.complexGroup, half); break;
-      case 'desert': buildDesertBiome(this.complexGroup, half); break;
-      case 'snow':   buildSnowBiome(this.complexGroup, half);   break;
-      default:       buildForestBiome(this.complexGroup, half);  break;
+      case 'forest': buildForestBiomeMain(this.complexGroup, half, helpers); break;
+      case 'desert': buildDesertBiomeMain(this.complexGroup, half, helpers); break;
+      case 'snow':   buildSnowBiomeMain(this.complexGroup, half, helpers);   break;
+      default:       buildForestBiomeMain(this.complexGroup, half, helpers);  break;
     }
   }
 
@@ -1373,6 +1401,36 @@ export class LevelManager {
       if (obj.isMesh) {
         obj.castShadow = false;
         obj.receiveShadow = false;
+      }
+    });
+  }
+
+  _freezeStaticComplexTransforms() {
+    // Otimização: a maioria dos objetos do bioma é estática. Congelar as matrizes
+    // reduz custo por frame em cenas com muitos meshes.
+    this.complexGroup.traverse(obj => {
+      // Não congelar elementos que possam precisar de updates de rotação/escala
+      // pelo updateDecorations (pines, etc.) — esses entram no cache _animRefs.
+      if (
+        obj.name === 'pine-tip'
+        || obj.name === 'mushroom-glow'
+        || obj.name === 'trophy-star'
+        || obj.name === 'trophy-ring'
+        || obj.name === 'aurora-plane'
+        || obj.name === 'aurora-plane-2'
+        || obj.name === 'fog-plane'
+        || obj.name === 'fog-plane-upper'
+        || obj.name === 'fireflies'
+        || obj.name === 'sand-particles'
+        || obj.name === 'snowflakes'
+        || obj.name === 'crystal-light'
+      ) {
+        return;
+      }
+
+      if (obj.isObject3D) {
+        obj.updateMatrix();
+        obj.matrixAutoUpdate = false;
       }
     });
   }

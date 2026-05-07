@@ -3,7 +3,9 @@
    Requisito: UI com feedback visual para luzes, replay, pausas, game over
    ========================================================================== */
 
+import * as THREE from 'three';
 import { getSnakeStepDuration } from './utils/helpers.js';
+import { createSkinHeadPreview } from './snake.js';
 
 export class UIManager {
   constructor() {
@@ -76,6 +78,10 @@ export class UIManager {
     this.comboText = document.getElementById('combo-text');
     this.comboMult = document.getElementById('combo-mult');
     this.comboBar = document.getElementById('combo-bar');
+
+    // ---- Skin previews (3D) ----
+    this._skinPreviewEntries = [];
+    this._skinPreviewsActive = false;
   }
 
   /* ── Loading ── */
@@ -172,6 +178,9 @@ export class UIManager {
   showPanel(panelId, visible) {
     const panel = document.getElementById(panelId);
     if (panel) panel.classList.toggle('visible', visible);
+    if (panelId === 'panel-skins') {
+      this._setSkinPreviewsActive(!!visible);
+    }
   }
 
   hideAllPanels() {
@@ -245,15 +254,27 @@ export class UIManager {
    */
   populateSkinGrid(skins, selectedIndex, onSelect) {
     if (!this.skinGrid) return;
+    this._disposeSkinPreviews();
     this.skinGrid.innerHTML = '';
     skins.forEach((skin, i) => {
       const card = document.createElement('div');
       card.className = `skin-card${i === selectedIndex ? ' selected' : ''}`;
-      const color = `#${skin.headColor.toString(16).padStart(6, '0')}`;
       card.innerHTML = `
-        <div class="sc-preview" style="background:${color};color:${color}"></div>
+        <div class="sc-preview"></div>
         <div class="sc-name">${skin.name}</div>
       `;
+      const previewHost = card.querySelector('.sc-preview');
+      if (previewHost) {
+        // Canvas pequeno e leve, com alpha para blend com UI.
+        const canvas = document.createElement('canvas');
+        canvas.width = 96;
+        canvas.height = 96;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.display = 'block';
+        previewHost.appendChild(canvas);
+        this._skinPreviewEntries.push(this._createSkinPreview(canvas, skin));
+      }
       card.addEventListener('click', () => {
         this.skinGrid.querySelectorAll('.skin-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
@@ -261,6 +282,85 @@ export class UIManager {
       });
       this.skinGrid.appendChild(card);
     });
+
+    // Se o painel estiver visível, começa já a animação.
+    const skinsPanelVisible = !!this.panelSkins?.classList.contains('visible');
+    this._setSkinPreviewsActive(skinsPanelVisible);
+  }
+
+  _createSkinPreview(canvas, skin) {
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: false,
+      alpha: true,
+      powerPreference: 'low-power',
+    });
+    renderer.setPixelRatio(1);
+    renderer.setSize(canvas.width, canvas.height, false);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
+    camera.position.set(0.9, 0.7, 1.4);
+    camera.lookAt(0, 0.25, 0);
+
+    const amb = new THREE.AmbientLight(0xffffff, 0.75);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(2, 3, 2);
+    scene.add(amb, dir);
+
+    const mesh = createSkinHeadPreview(skin);
+    // Normalizar escala/posição para todos os previews ficarem parecidos.
+    mesh.position.set(0, 0.15, 0);
+    scene.add(mesh);
+
+    let raf = 0;
+    const tick = (t) => {
+      if (!this._skinPreviewsActive) return;
+      // Rotação suave (t em ms)
+      mesh.rotation.y = (t * 0.0011) % (Math.PI * 2);
+      mesh.rotation.x = Math.sin(t * 0.001) * 0.12;
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const dispose = () => {
+      stop();
+      scene.traverse(obj => {
+        if (!obj) return;
+        if (obj.geometry?.dispose) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m?.dispose?.());
+          else obj.material.dispose?.();
+        }
+      });
+      renderer.dispose();
+    };
+
+    return { start, stop, dispose };
+  }
+
+  _setSkinPreviewsActive(active) {
+    this._skinPreviewsActive = !!active;
+    for (const e of this._skinPreviewEntries) {
+      if (!e) continue;
+      if (this._skinPreviewsActive) e.start();
+      else e.stop();
+    }
+  }
+
+  _disposeSkinPreviews() {
+    for (const e of this._skinPreviewEntries) {
+      try { e?.dispose?.(); } catch (_) { /* ignore */ }
+    }
+    this._skinPreviewEntries = [];
   }
 
   /**

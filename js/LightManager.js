@@ -25,7 +25,9 @@ export class LightManager {
     this.directional.name = 'directional';
     this.directional.position.set(15, 22, 10);
     this.directional.castShadow = true;
-    this.directional.shadow.mapSize.set(1024, 1024);
+    // Performance: sombras são caras (especialmente com muitos meshes do bioma).
+    // 512 costuma ser um bom compromisso.
+    this.directional.shadow.mapSize.set(512, 512);
     this.directional.shadow.camera.left   = -18;
     this.directional.shadow.camera.right  =  18;
     this.directional.shadow.camera.top    =  18;
@@ -41,7 +43,7 @@ export class LightManager {
     this.spot.name = 'spotlight';
     this.spot.position.set(0, 12, 0);
     this.spot.castShadow = true;
-    this.spot.shadow.mapSize.set(512, 512);
+    this.spot.shadow.mapSize.set(256, 256);
     this.spot.shadow.bias = -0.001;
     this.spot.shadow.normalBias = 0.02;
     // Target para o spotlight — será atualizado no game loop

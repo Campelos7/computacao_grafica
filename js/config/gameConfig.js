@@ -23,9 +23,22 @@ export const CELL_SIZE = 1;
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Duração de um passo em segundos com dificuldade NORMAL e pace do mapa = 1.0.
- * Diminuir = cobra mais rápida no modo “referência”; Fácil/Difícil e `pace`
- * do JSON escalam a partir deste valor.
+ * Base de velocidade do jogo.
+ *
+ * Este valor é a **duração de 1 passo (em segundos)** quando:
+ * - a dificuldade é **NORMAL** (`snakeStepMult = 1.0`)
+ * - o mapa tem `pace = 1.0` em `levels/levelConfig.json`
+ *
+ * Como ler:
+ * - Maior valor = MAIS lento (há mais tempo entre passos).
+ * - Menor valor = MAIS rápido.
+ *
+ * Regra usada no código (ver `getSnakeStepDuration()` em `js/utils/helpers.js`):
+ *   stepDuration = SNAKE_STEP_REFERENCE_SECONDS * paceDoMapa * snakeStepMultDaDificuldade
+ *
+ * Exemplos práticos:
+ * - Quer “NORMAL” mais rápido em TODOS os mapas? Diminui este número.
+ * - Quer só um mapa mais rápido? Mantém isto e altera `pace` desse mapa no JSON.
  */
 export const SNAKE_STEP_REFERENCE_SECONDS = 0.125;
 
@@ -33,6 +46,10 @@ export const SNAKE_STEP_REFERENCE_SECONDS = 0.125;
  * Dificuldade global (independente do mapa escolhido).
  * - snakeStepMult: multiplica o intervalo entre passos (>1 = cobra mais lenta).
  * - obstacleSpeedMult: multiplica a velocidade das animações dos obstáculos (>1 = mais rápido).
+ *
+ * Dica rápida:
+ * - Para alterar a velocidade do modo **NORMAL**, muda o `snakeStepMult` do item `id: 'normal'`
+ *   (ou usa `SNAKE_STEP_REFERENCE_SECONDS` para ajustar tudo de uma vez).
  */
 export const DIFFICULTY_LEVELS = [
   { id: 'easy', label: 'FÁCIL', snakeStepMult: 1.38, obstacleSpeedMult: 0.62 },
@@ -155,7 +172,7 @@ export const CAMERA = {
 
 export const RENDER = {
   /** Limite superior de devicePixelRatio para equilíbrio qualidade / desempenho. */
-  pixelRatioMax: 1.5,
+  pixelRatioMax: 1.0,
   toneMappingExposure: 1.1,
 };
 

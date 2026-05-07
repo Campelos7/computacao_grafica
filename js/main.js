@@ -73,7 +73,8 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER.pixelRatioMax));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Sombras suaves (PCFSoft) são caras; BasicShadowMap costuma ser suficiente aqui.
+renderer.shadowMap.type = THREE.BasicShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = RENDER.toneMappingExposure;
@@ -268,15 +269,13 @@ function respawnFoodAfterEat(ateItemType) {
 let highScore = parseInt(localStorage.getItem(STORAGE_KEYS.HIGHSCORE) || '0', 10);
 ui.setHighScore(highScore);
 
-// ---- 3D Menu ----
+// ---- 3D Menu (desligado: UI é 2D) ----
 const menuGroup = new THREE.Group();
 menuGroup.name = 'menu3d';
 scene.add(menuGroup);
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
 let menuFont = null;
 const menuItems = [];
-let hoveredMenu = null;
+// Nota: o menu activo é 2D (HTML). O raycaster/hover 3D foi desactivado para performance.
 
 // ---- 2D Main Menu buttons ----
 ui.btnMenuPlay?.addEventListener('click', () => {
@@ -349,7 +348,8 @@ async function init() {
 
     ui.setLoadingProgress(85, 'Creating menu...');
     createMenu3D();
-    createAmbientParticles(80);
+    // Menu deve ser super fluido: menos partículas no fundo.
+    createAmbientParticles(30);
     createPreviewSnake();
 
     ui.setLoadingProgress(100, 'Ready!');
@@ -408,7 +408,8 @@ function updateAmbientParticles(elapsed) {
    PREVIEW SNAKE — Cobra a deslizar no fundo do menu
    ══════════════════════════════════════════════════════════════════════════ */
 function createPreviewSnake() {
-  const segCount = 8;
+  // Menos segmentos no preview para reduzir custo de drawcalls.
+  const segCount = 6;
   const headGeo = new THREE.SphereGeometry(0.35, 12, 10);
   const bodyGeo = new THREE.BoxGeometry(0.5, 0.4, 0.55);
   const headMat = new THREE.MeshStandardMaterial({
@@ -567,25 +568,7 @@ function createMenu3D() {
   }
 }
 
-function handleMenuClick() {
-  if (state !== STATES.MENU || menuPage !== MENU_PAGES.MAIN || !hoveredMenu) return;
-
-  const action = hoveredMenu.userData.action;
-  switch (action) {
-    case 'play':
-      startGame();
-      break;
-    case 'levels':
-      openSubMenu(MENU_PAGES.LEVELS);
-      break;
-    case 'skins':
-      openSubMenu(MENU_PAGES.SKINS);
-      break;
-    case 'settings':
-      openSubMenu(MENU_PAGES.SETTINGS);
-      break;
-  }
-}
+// (handleMenuClick removido — menu é HTML)
 
 function openSubMenu(page) {
   menuPage = page;
@@ -632,28 +615,7 @@ function closeSubMenu() {
   ui.showPanel('panel-main', true);
 }
 
-function updateMenuRaycaster() {
-  if (state !== STATES.MENU || menuPage !== MENU_PAGES.MAIN) return;
-
-  raycaster.setFromCamera(mouse, camCtrl.camera);
-  const meshes = menuItems.map(m => m.mesh);
-  const intersects = raycaster.intersectObjects(meshes);
-
-  if (hoveredMenu) {
-    hoveredMenu.scale.setScalar(1);
-    hoveredMenu.material.emissiveIntensity = hoveredMenu.userData.baseEmissive;
-    hoveredMenu = null;
-  }
-
-  if (intersects.length > 0) {
-    hoveredMenu = intersects[0].object;
-    hoveredMenu.scale.setScalar(1.12);
-    hoveredMenu.material.emissiveIntensity = 0.9;
-    renderer.domElement.style.cursor = 'pointer';
-  } else {
-    renderer.domElement.style.cursor = 'default';
-  }
-}
+// (updateMenuRaycaster removido — menu é HTML)
 
 /* ══════════════════════════════════════════════════════════════════════════
    GAME CONTROL
@@ -669,6 +631,12 @@ function enterMenu() {
   previewGroup.visible = true;
   snake.group.visible = false;
   food.group.visible = false;
+  // Menu deve ser leve: esconder cenário pesado e obstáculos.
+  levelMgr.setEnvironmentVisible(false);
+  obstacles.setVisible(false);
+  // E também desligar sombras no menu (reanima no startGame consoante setting).
+  renderer.shadowMap.enabled = false;
+  ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
 
   // Jump camera to menu view — frontal, ao nível dos textos 3D
   camCtrl.resetPosition(
@@ -711,6 +679,11 @@ function startGame() {
   previewGroup.visible = false;
   snake.group.visible = true;
   food.group.visible = true;
+  levelMgr.setEnvironmentVisible(true);
+  obstacles.setVisible(true);
+  // Restaurar sombras para gameplay (utilizador ainda pode togglar nas settings).
+  renderer.shadowMap.enabled = true;
+  ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
 
   snake.reset();
   snake.setSkin(selectedSkinIndex);
@@ -918,12 +891,6 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyB') replay.rewind();
     if (e.code === 'KeyN') replay.cycleSpeed();
   }
-});
-
-// ---- Mouse ----
-window.addEventListener('pointermove', (e) => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 });
 
 window.addEventListener('pointerdown', (e) => {
