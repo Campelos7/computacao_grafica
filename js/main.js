@@ -4,24 +4,23 @@
    Requisitos cobertos:
    - R1: Objetos 3D complexos   - R2: Toggle câmara (C)
    - R3: 4 luzes (1-4)          - R4: Teclado + Rato + Raycaster
-   - R5: Animação + Replay (R)  - Post-processing (M)
+  - R5: Animação  - Post-processing (M)
    - Níveis JSON   - Power-ups   - Skins   - High Score
    ========================================================================== */
 import * as THREE from 'three';
-import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
 import { DIRS, BOARD_SIZE } from './utils/helpers.js';
 import { UIManager } from './UIManager.js';
 import { LightManager } from './LightManager.js';
 import { CameraController } from './CameraController.js';
-import { ReplaySystem } from './ReplaySystem.js';
 import { PostProcessing } from './PostProcessing.js';
 import { LevelManager } from './LevelManager.js';
 import { Obstacles } from './Obstacles.js';
-import { Snake, SNAKE_SKINS } from './snake.js';
-import { Food, ITEM_TYPES } from './food.js';
+import { Snake, SNAKE_SKINS, createSkinHeadPreview } from './snake/index.js';
+import { Food } from './food.js';
 import { SoundManager } from './SoundManager.js';
+
+window.__snakeBootStarted = true;
 
 /* ══════════════════════════════════════════════════════════════════════════
    STATES
@@ -32,7 +31,6 @@ const STATES = {
   PLAYING: 'playing',
   PAUSED: 'paused',
   GAMEOVER: 'gameover',
-  REPLAY: 'replay',
 };
 
 const MENU_PAGES = {
@@ -72,7 +70,6 @@ const obstacles = new Obstacles(scene);
 const levelMgr = new LevelManager(scene, obstacles, lightMgr, ui);
 const snake = new Snake(scene);
 const food = new Food(scene);
-const replay = new ReplaySystem(ui);
 const sound = new SoundManager();
 const postProc = new PostProcessing(renderer, scene, camCtrl.camera);
 
@@ -96,6 +93,7 @@ let pendingGameOver = false;
 const deathFlash = document.getElementById('death-flash');
 const hudSound = document.getElementById('hud-sound');
 const clock = new THREE.Clock();
+let animationStarted = false;
 
 function applyLevelVisualTheme(level) {
   const theme = level?.theme || {};
@@ -122,22 +120,15 @@ const COMBO_DECAY  = 3.0;          // segundos — tempo até o combo expirar de
 const COMBO_MULTIPLIERS = [1, 1, 1.5, 2, 2.5, 3]; // combo 0,1,2,3,4,5+
 
 // ---- Selections ----
-let selectedLevelIndex = 0;
+let selectedMapIndex = 0;
+let selectedDifficulty = 'easy';
 let selectedSkinIndex = 0;
 
 // ---- High Score (localStorage) ----
 let highScore = parseInt(localStorage.getItem('snake3d_highscore') || '0', 10);
 ui.setHighScore(highScore);
 
-// ---- 3D Menu ----
-const menuGroup = new THREE.Group();
-menuGroup.name = 'menu3d';
-scene.add(menuGroup);
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-let menuFont = null;
-const menuItems = [];
-let hoveredMenu = null;
+// (Menu 3D removido — o menu é agora 100% HTML/2D)
 
 // ---- 2D Main Menu buttons ----
 ui.btnMenuPlay?.addEventListener('click', () => {
@@ -183,34 +174,43 @@ async function init() {
     ui.setLoadingProgress(15, 'Loading levels...');
     await levelMgr.loadConfig('levels/levelConfig.json');
 
-    ui.setLoadingProgress(30, 'Loading 3D models...');
+    ui.setLoadingProgress(40, 'Loading 3D models...');
     await levelMgr.loadModels((p) => {
-      ui.setLoadingProgress(30 + p * 25, 'Loading 3D models...');
+      ui.setLoadingProgress(40 + p * 30, 'Loading 3D models...');
     });
 
-    ui.setLoadingProgress(60, 'Loading fonts...');
-    await loadMenuFont();
-
     ui.setLoadingProgress(75, 'Building level...');
-    const initialLevel = await levelMgr.loadLevel(0, true); // skip transition on init
+    const initialLevel = await levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true);
     food.setAvailablePowerups(levelMgr.powerups);
     stepDuration = levelMgr.speed;
     applyLevelVisualTheme(initialLevel);
 
     ui.setLoadingProgress(85, 'Creating menu...');
-    createMenu3D();
     createAmbientParticles(80);
     createPreviewSnake();
 
     ui.setLoadingProgress(100, 'Ready!');
     await new Promise(r => setTimeout(r, 400));
     ui.hideLoading();
+    window.__snakeBootDone = true;
 
     enterMenu();
-    animate();
+    if (!animationStarted) {
+      animationStarted = true;
+      animate();
+    }
   } catch (err) {
     console.error('Erro na inicialização:', err);
-    ui.setLoadingProgress(100, 'Error! Check console.');
+    ui.setLoadingProgress(100, 'Erro ao carregar. A abrir menu...');
+    await new Promise(r => setTimeout(r, 600));
+    ui.hideLoading();
+    window.__snakeBootDone = true;
+    enterMenu();
+    if (!animationStarted) {
+      animationStarted = true;
+      animate();
+    }
+    ui.showNotification('Alguns recursos falharam, mas o jogo iniciou.', 'default', 3200);
   }
 }
 
@@ -318,134 +318,25 @@ function updatePreviewSnake(elapsed) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   3D MENU (Raycaster)
+   SUB-MENUS (HTML/2D)
    ══════════════════════════════════════════════════════════════════════════ */
-function loadMenuFont() {
-  return new Promise((resolve) => {
-    const loader = new FontLoader();
-    const fontUrl = 'https://unpkg.com/three@0.161.0/examples/fonts/helvetiker_bold.typeface.json';
-    loader.load(fontUrl, (font) => {
-      menuFont = font;
-      resolve();
-    }, undefined, () => {
-      console.warn('Font not available, using fallback menu.');
-      resolve();
-    });
-  });
-}
-
-function createMenu3D() {
-  const items = [
-    { text: 'PLAY', y: 3.5, color: 0x00ffff, action: 'play' },
-    { text: 'LEVELS', y: 1.8, color: 0xff00ff, action: 'levels' },
-    { text: 'SKINS', y: 0.1, color: 0xffff00, action: 'skins' },
-    { text: 'SETTINGS', y: -1.6, color: 0x39ff14, action: 'settings' },
-  ];
-
-  if (menuFont) {
-    for (const item of items) {
-      const geo = new TextGeometry(item.text, {
-        font: menuFont, size: 0.7, depth: 0.2,
-        curveSegments: 4, bevelEnabled: true,
-        bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 2,
-      });
-      geo.computeBoundingBox();
-      geo.center();
-
-      const mat = new THREE.MeshStandardMaterial({
-        color: item.color, emissive: item.color, emissiveIntensity: 0.4,
-        roughness: 0.3, metalness: 0.5,
-      });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(0, item.y, 0);
-      mesh.castShadow = true;
-      mesh.userData = { action: item.action, baseColor: item.color, baseEmissive: 0.4 };
-      menuGroup.add(mesh);
-      menuItems.push({ mesh, action: item.action });
-    }
-
-    // Título
-    const titleGeo = new TextGeometry('SNAKE 3D', {
-      font: menuFont, size: 1.2, depth: 0.35,
-      curveSegments: 4, bevelEnabled: true,
-      bevelThickness: 0.03, bevelSize: 0.02, bevelSegments: 2,
-    });
-    titleGeo.computeBoundingBox();
-    titleGeo.center();
-
-    const titleMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, emissive: 0xff00ff, emissiveIntensity: 0.6,
-      roughness: 0.2, metalness: 0.6,
-    });
-    const titleMesh = new THREE.Mesh(titleGeo, titleMat);
-    titleMesh.position.set(0, 6.2, 0);
-    titleMesh.name = 'menu-title';
-    menuGroup.add(titleMesh);
-
-    // High score text sob o título
-    if (highScore > 0) {
-      const hsGeo = new TextGeometry(`HI: ${highScore}`, {
-        font: menuFont, size: 0.35, depth: 0.05,
-        curveSegments: 3, bevelEnabled: false,
-      });
-      hsGeo.computeBoundingBox();
-      hsGeo.center();
-      const hsMat = new THREE.MeshStandardMaterial({
-        color: 0x39ff14, emissive: 0x39ff14, emissiveIntensity: 0.5,
-        roughness: 0.3, metalness: 0.3,
-      });
-      const hsMesh = new THREE.Mesh(hsGeo, hsMat);
-      hsMesh.position.set(0, 5.0, 0);
-      hsMesh.name = 'menu-highscore';
-      menuGroup.add(hsMesh);
-    }
-  } else {
-    // Fallback: Box geometry
-    for (const item of items) {
-      const geo = new THREE.BoxGeometry(4.5, 0.7, 0.25);
-      const mat = new THREE.MeshStandardMaterial({
-        color: item.color, emissive: item.color, emissiveIntensity: 0.4,
-        roughness: 0.3, metalness: 0.5,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(0, item.y, 0);
-      mesh.userData = { action: item.action, baseColor: item.color, baseEmissive: 0.4 };
-      menuGroup.add(mesh);
-      menuItems.push({ mesh, action: item.action });
-    }
-  }
-}
-
-function handleMenuClick() {
-  if (state !== STATES.MENU || menuPage !== MENU_PAGES.MAIN || !hoveredMenu) return;
-
-  const action = hoveredMenu.userData.action;
-  switch (action) {
-    case 'play':
-      startGame();
-      break;
-    case 'levels':
-      openSubMenu(MENU_PAGES.LEVELS);
-      break;
-    case 'skins':
-      openSubMenu(MENU_PAGES.SKINS);
-      break;
-    case 'settings':
-      openSubMenu(MENU_PAGES.SETTINGS);
-      break;
-  }
-}
-
 function openSubMenu(page) {
   menuPage = page;
   ui.hideAllPanels();
   ui.showPanel('panel-main', false);
 
   if (page === MENU_PAGES.LEVELS) {
-    ui.populateLevelGrid(levelMgr.levels, selectedLevelIndex, (i) => {
-      selectedLevelIndex = i;
-      levelMgr.loadLevel(i, true).then(() => { // skip transition in menu
+    ui.populateLevelGrid(levelMgr.levels, selectedMapIndex, (i) => {
+      selectedMapIndex = i;
+      levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true).then(() => { // preview em menu
+        food.setAvailablePowerups(levelMgr.powerups);
+        stepDuration = levelMgr.speed;
+        applyLevelVisualTheme(levelMgr.currentLevel);
+      });
+    });
+    ui.populateDifficultyGrid(levelMgr.difficulties, selectedDifficulty, (difficultyId) => {
+      selectedDifficulty = difficultyId;
+      levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true).then(() => { // preview em menu
         food.setAvailablePowerups(levelMgr.powerups);
         stepDuration = levelMgr.speed;
         applyLevelVisualTheme(levelMgr.currentLevel);
@@ -458,7 +349,7 @@ function openSubMenu(page) {
     ui.populateSkinGrid(SNAKE_SKINS, selectedSkinIndex, (i) => {
       selectedSkinIndex = i;
       snake.setSkin(i);
-    });
+    }, createSkinHeadPreview);
     ui.showPanel('panel-skins', true);
   }
 
@@ -475,28 +366,7 @@ function closeSubMenu() {
   ui.showPanel('panel-main', true);
 }
 
-function updateMenuRaycaster() {
-  if (state !== STATES.MENU || menuPage !== MENU_PAGES.MAIN) return;
 
-  raycaster.setFromCamera(mouse, camCtrl.camera);
-  const meshes = menuItems.map(m => m.mesh);
-  const intersects = raycaster.intersectObjects(meshes);
-
-  if (hoveredMenu) {
-    hoveredMenu.scale.setScalar(1);
-    hoveredMenu.material.emissiveIntensity = hoveredMenu.userData.baseEmissive;
-    hoveredMenu = null;
-  }
-
-  if (intersects.length > 0) {
-    hoveredMenu = intersects[0].object;
-    hoveredMenu.scale.setScalar(1.12);
-    hoveredMenu.material.emissiveIntensity = 0.9;
-    renderer.domElement.style.cursor = 'pointer';
-  } else {
-    renderer.domElement.style.cursor = 'default';
-  }
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    GAME CONTROL
@@ -507,15 +377,12 @@ function enterMenu() {
   ui.showMenu(true);
   ui.hideAllPanels();
   ui.showPanel('panel-main', true);
-  menuGroup.visible = false; // menu agora é 2D (HTML)
   previewGroup.visible = true;
   snake.group.visible = false;
   food.group.visible = false;
 
-  // Jump camera to menu view — frontal, ao nível dos textos 3D
+  // Câmara do menu — frontal, afastada
   camCtrl.resetPosition(
-    // Um pouco mais alto e afastado para evitar enquadramentos “dentro” do cenário
-    // (paredes/decorações) no arranque.
     new THREE.Vector3(0, 7.5, 20),
     new THREE.Vector3(0, 3.2, 0)
   );
@@ -523,7 +390,12 @@ function enterMenu() {
   renderer.domElement.style.cursor = 'default';
 }
 
-function startGame() {
+async function startGame() {
+  const currentLevel = await levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true); // sempre skip transition
+  applyLevelVisualTheme(currentLevel);
+  food.setAvailablePowerups(levelMgr.powerups);
+  stepDuration = levelMgr.speed;
+
   state = STATES.PLAYING;
   menuPage = MENU_PAGES.MAIN;
   score = 0;
@@ -545,7 +417,6 @@ function startGame() {
   ui.hideAllPanels();
   ui.showPanel('panel-main', false);
 
-  menuGroup.visible = false;
   previewGroup.visible = false;
   snake.group.visible = true;
   food.group.visible = true;
@@ -553,11 +424,7 @@ function startGame() {
   snake.reset();
   snake.setSkin(selectedSkinIndex);
   snake.clearTrail();
-  replay.clear();
-  food.respawn(snake.segments, obstacles.getOccupiedPositions());
-
-  stepDuration = levelMgr.speed;
-  food.setAvailablePowerups(levelMgr.powerups);
+  food.respawnFood(snake.segments, obstacles.getOccupiedPositions());
 
   // Iniciar música de fundo
   sound.startMusic();
@@ -698,25 +565,6 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
-  // Replay (R)
-  if (e.code === 'KeyR') {
-    if (state === STATES.GAMEOVER) {
-      const started = replay.toggleReplay();
-      if (started) {
-        state = STATES.REPLAY;
-        snake.group.visible = true;
-        ui.showGameOver(false);
-        ui.showNotification('REPLAY MODE', 'default');
-      }
-    } else if (state === STATES.REPLAY) {
-      replay.toggleReplay();
-      state = STATES.GAMEOVER;
-      ui.showGameOver(true, score, highScore);
-    } else if (state === STATES.PLAYING) {
-      // Noop during play — could restart here if desired
-    }
-  }
-
   // Post-Processing (M)
   if (e.code === 'KeyM') {
     const ppOn = postProc.toggle();
@@ -724,23 +572,11 @@ window.addEventListener('keydown', (e) => {
     ui.updateSettingToggle('setting-postfx', ppOn);
   }
 
-  // Replay controls
-  if (state === STATES.REPLAY) {
-    if (e.code === 'Space') { e.preventDefault(); replay.togglePlay(); }
-    if (e.code === 'KeyB') replay.rewind();
-    if (e.code === 'KeyN') replay.cycleSpeed();
-  }
 });
 
 // ---- Mouse ----
-window.addEventListener('pointermove', (e) => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-});
-
-window.addEventListener('pointerdown', (e) => {
+window.addEventListener('pointerdown', () => {
   renderer.domElement.focus();
-  // Menu agora é 2D (HTML), então não há click 3D via raycaster.
 });
 
 // ---- Sub-menu back buttons ----
@@ -855,10 +691,10 @@ function animate() {
     while (accumulator >= effectiveStep) {
       accumulator -= effectiveStep;
 
-      const result = snake.updateStep(food.cell, (pos) => obstacles.checkCollision(pos));
+      const result = snake.updateStep(food.foodCell, (pos) => obstacles.checkCollision(pos));
 
+      /* ── Comeu COMIDA ── */
       if (result.ate) {
-        const itemType = food.type;
         sound.playEat();
 
         // Combo: só activa quando se come 2 comidas num intervalo curto
@@ -867,61 +703,42 @@ function animate() {
         lastEatTime = now;
 
         if (timeSinceLastEat <= COMBO_WINDOW) {
-          // Comeu dentro da janela — incrementar combo
           comboCount++;
           comboTimer = COMBO_DECAY;
         } else {
-          // Demorou demais — resetar combo (não perde pontos, apenas o multiplicador)
-          comboCount = 1;  // esta comida conta como a primeira do próximo possível combo
+          comboCount = 1;
           comboTimer = 0;
           ui.hideCombo();
         }
         const comboMult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
 
-        if (itemType === ITEM_TYPES.SHIELD) {
-          snake.activateShield();
-          sound.playPowerup();
-          ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
-          ui.showPowerUp('shield');
-        } else if (itemType === ITEM_TYPES.PORTAL) {
-          const safePos = new THREE.Vector3(0, 0, 0);
-          snake.segments[0].copy(safePos);
-          sound.playPowerup();
-          ui.showNotification('🌀 PORTAL TELEPORT!', 'powerup');
-        } else {
-          const pts = Math.floor(1 * comboMult);
-          score += pts;
-          ui.setScore(score);
-        }
+        const pts = Math.floor(1 * comboMult);
+        score += pts;
+        ui.setScore(score);
 
-        food.emitCollectParticles(food.cell.clone(), food.getCollectColor());
+        food.emitCollectParticles(food.foodCell.clone(), food.getCollectColor());
 
-        if (itemType !== ITEM_TYPES.FOOD) {
-          const pts = Math.floor(3 * comboMult);
-          score += pts;
-          ui.setScore(score);
-        }
-
-        // Mostrar combo se >= 2
         if (comboCount >= 2) {
           sound.playCombo();
           ui.showCombo(comboCount, comboMult);
         }
 
-        if (levelMgr.shouldAdvance(score)) {
-          levelMgr.advanceLevel().then(newLevel => {
-            if (newLevel) {
-              stepDuration = newLevel.speed;
-              food.setAvailablePowerups(levelMgr.powerups);
-              food.respawn(snake.segments, obstacles.getOccupiedPositions());
-              applyLevelVisualTheme(newLevel);
-              sound.playLevelUp();
-              ui.showNotification('LEVEL UP!', 'powerup');
-            }
-          });
-        }
+        // Respawnar comida + tentar spawnar shield
+        food.respawnFood(snake.segments, obstacles.getOccupiedPositions());
+        food.trySpawnShield(snake.segments, obstacles.getOccupiedPositions());
+      }
 
-        food.respawn(snake.segments, obstacles.getOccupiedPositions());
+      /* ── Verificar SHIELD (independente da comida) ──
+         Verificamos APÓS updateStep para usar a posição real da cabeça */
+      if (food.shieldPresent && food.checkShieldCollision(snake.segments[0])) {
+        snake.activateShield();
+        sound.playPowerup();
+        ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
+        ui.showPowerUp('shield');
+        food.emitCollectParticles(food.shieldCell.clone(), food.getShieldCollectColor());
+        food.removeShield();
+        score += 3;
+        ui.setScore(score);
       }
 
       // Emitir trail a cada step
@@ -936,14 +753,7 @@ function animate() {
         handleGameOver();
       }
 
-      replay.record(snake.segments, snake.direction, score);
     }
-  }
-
-  // ---- Replay state ----
-  if (state === STATES.REPLAY) {
-    const frame = replay.update(delta);
-    if (frame) renderReplayFrame(frame);
   }
 
   // ---- Trail update ----
@@ -961,13 +771,13 @@ function animate() {
   obstacles.update(elapsed, delta);
   levelMgr.updateDecorations(elapsed);
 
-  lightMgr.setPointLightPosition(food.cell.x, 1.8, food.cell.z);
+  lightMgr.setPointLightPosition(food.foodCell.x, 1.8, food.foodCell.z);
   lightMgr.pulsePointLight(elapsed);
   if (snake.headPosition) {
     lightMgr.setSpotLightTarget(snake.headPosition.x, 0, snake.headPosition.z);
   }
 
-  if (state === STATES.PLAYING || state === STATES.REPLAY) {
+  if (state === STATES.PLAYING) {
     camCtrl.followSnake(snake.headPosition, snake.direction);
   }
   camCtrl.update(delta);
@@ -975,45 +785,6 @@ function animate() {
   postProc.update(elapsed, delta);
   postProc.setCamera(camCtrl.camera);
   postProc.render();
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   REPLAY RENDERING
-   ══════════════════════════════════════════════════════════════════════════ */
-function renderReplayFrame(frame) {
-  const segments = frame.segments;
-
-  while (snake.group.children.length < segments.length) {
-    const isHead = snake.group.children.length === 0;
-    const mesh = new THREE.Mesh(
-      isHead ? snake.headGeometry : snake.bodyGeometry,
-      isHead ? snake.headMaterial : snake.bodyMaterial
-    );
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    snake.group.add(mesh);
-  }
-  while (snake.group.children.length > segments.length) {
-    const mesh = snake.group.children[snake.group.children.length - 1];
-    snake.group.remove(mesh);
-  }
-
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const mesh = snake.group.children[i];
-    if (mesh) {
-      mesh.position.set(seg.x, 0.38, seg.z);
-      if (i === 0) {
-        const dir = frame.direction;
-        mesh.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
-      }
-    }
-  }
-
-  if (segments.length > 0) {
-    snake.segments[0] = new THREE.Vector3(segments[0].x, segments[0].y, segments[0].z);
-    snake.direction.set(frame.direction.x, frame.direction.y, frame.direction.z);
-  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

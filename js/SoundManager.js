@@ -23,10 +23,13 @@ export class SoundManager {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.masterGain = this.ctx.createGain();
+      // GUIA DE EDIÇÃO:
+      // - volume geral do jogo: masterGain.gain.value
       this.masterGain.gain.value = 0.35;
       this.masterGain.connect(this.ctx.destination);
 
       this.musicGain = this.ctx.createGain();
+      // - volume só da música: musicGain.gain.value
       this.musicGain.gain.value = 0.12;
       this.musicGain.connect(this.masterGain);
 
@@ -59,6 +62,9 @@ export class SoundManager {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
+    // GUIA DE EDIÇÃO (eat):
+    // - frequência inicial/final define tom do efeito
+    // - envelope gain define duração/percussão
     osc.type = 'square';
     osc.frequency.setValueAtTime(880, t);
     osc.frequency.exponentialRampToValueAtTime(1320, t + 0.06);
@@ -76,6 +82,7 @@ export class SoundManager {
   playPowerup() {
     if (!this._ensureContext() || this.muted) return;
     const t = this.ctx.currentTime;
+    // Muda o "arpejo" alterando este array de notas.
     const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
 
     notes.forEach((freq, i) => {
@@ -250,7 +257,11 @@ export class SoundManager {
     if (!this.musicPlaying || !this.ctx) return;
 
     const t = this.ctx.currentTime;
-    // Melodia simples tipo retro (notas MIDI como frequências)
+    // GUIA DE EDIÇÃO (música):
+    // - melody[] altera a melodia principal
+    // - noteLen altera velocidade da música
+    // - bass[] altera linha de baixo
+    // Melodia simples tipo retro (notas como frequências em Hz)
     const melody = [
       // bar 1
       262, 0, 330, 0, 392, 0, 330, 0,

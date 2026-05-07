@@ -42,7 +42,7 @@ canvas { display: block; outline: none; }
 body.menu-active canvas { display: none; }
 body.menu-active #hud,
 body.menu-active #light-indicators,
-body.menu-active #replay-bar { display: none !important; }
+body.menu-active #light-indicators { display: none !important; }
 
 /* ==========================================================================
    LOADING SCREEN
@@ -358,106 +358,6 @@ body.menu-active #replay-bar { display: none !important; }
 }
 
 /* ==========================================================================
-   REPLAY CONTROLS
-   Requisito: SISTEMA DE REPLAY com controlos (play/pause/rewind) via tecla R
-   ========================================================================== */
-#replay-bar {
-  position: fixed;
-  bottom: 20px; left: 50%;
-  transform: translateX(-50%);
-  z-index: 70;
-  background: var(--bg-panel);
-  border: 1px solid var(--neon-magenta);
-  border-radius: 10px;
-  padding: 12px 24px;
-  backdrop-filter: blur(12px);
-  display: none;
-  align-items: center; gap: 14px;
-  box-shadow: 0 0 25px rgba(255, 0, 255, 0.15);
-  min-width: 450px;
-}
-#replay-bar.visible { display: flex; }
-#replay-bar .replay-label {
-  font-family: var(--font-retro);
-  font-size: 8px;
-  color: var(--neon-magenta);
-  text-shadow: 0 0 6px var(--neon-magenta);
-  white-space: nowrap;
-}
-#replay-bar button {
-  background: rgba(255, 0, 255, 0.12);
-  border: 1px solid rgba(255, 0, 255, 0.3);
-  color: var(--neon-magenta);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 6px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-#replay-bar button:hover {
-  background: rgba(255, 0, 255, 0.25);
-  box-shadow: 0 0 12px rgba(255, 0, 255, 0.3);
-}
-#replay-timeline {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: rgba(255, 0, 255, 0.15);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-#replay-timeline::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: var(--neon-magenta);
-  box-shadow: 0 0 8px var(--neon-magenta);
-  cursor: pointer;
-}
-#replay-frame {
-  font-family: var(--font-retro);
-  font-size: 7px;
-  color: rgba(255, 0, 255, 0.5);
-  white-space: nowrap;
-  min-width: 50px;
-  text-align: right;
-}
-
-/* ==========================================================================
-   LEVEL TRANSITION
-   ========================================================================== */
-#level-transition {
-  position: fixed; inset: 0;
-  z-index: 100;
-  background: var(--bg-dark);
-  display: flex;
-  flex-direction: column;
-  align-items: center; justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transition: opacity 0.5s ease, visibility 0s 0.5s;
-}
-#level-transition.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 0.5s ease, visibility 0s; }
-#level-transition .lt-name {
-  font-family: var(--font-retro);
-  font-size: 22px;
-  color: var(--neon-cyan);
-  text-shadow: 0 0 25px var(--neon-cyan);
-  animation: pulse-glow 1s ease-in-out infinite;
-}
-#level-transition .lt-sub {
-  font-family: var(--font-retro);
-  font-size: 9px;
-  color: var(--neon-magenta);
-  margin-top: 15px;
-}
-
-/* ==========================================================================
    NOTIFICATIONS (Power-up toasts)
    ========================================================================== */
 #notification-container {
@@ -598,6 +498,14 @@ body.menu-active #replay-bar { display: none !important; }
   margin-bottom: 30px;
 }
 
+.menu-section-title {
+  font-family: var(--font-retro);
+  font-size: 10px;
+  color: var(--neon-yellow);
+  margin: 8px 0 14px;
+  letter-spacing: 1px;
+}
+
 .menu-panel-back {
   margin-top: 30px;
   background: rgba(255, 0, 255, 0.1);
@@ -624,6 +532,7 @@ body.menu-active #replay-bar { display: none !important; }
   flex-wrap: wrap;
   justify-content: center;
   max-width: 750px;
+  margin-bottom: 16px;
 }
 
 .level-card {
@@ -679,6 +588,41 @@ body.menu-active #replay-bar { display: none !important; }
   font-size: 8px;
   color: var(--neon-yellow);
   margin-top: 10px;
+}
+
+.difficulty-grid {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.difficulty-card {
+  min-width: 140px;
+  background: var(--bg-panel);
+  border: 2px solid rgba(255, 255, 0, 0.15);
+  border-radius: 10px;
+  padding: 14px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.difficulty-card:hover {
+  border-color: var(--neon-yellow);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 255, 0, 0.12);
+}
+
+.difficulty-card.selected {
+  border-color: var(--neon-yellow);
+  box-shadow: 0 0 20px rgba(255, 255, 0, 0.22), inset 0 0 20px rgba(255, 255, 0, 0.04);
+}
+
+.difficulty-card .dc-name {
+  font-family: var(--font-retro);
+  font-size: 9px;
+  color: var(--neon-yellow);
 }
 
 /* ---- Skin selection cards ---- */
@@ -879,7 +823,6 @@ body.menu-active #replay-bar { display: none !important; }
   #hud-title { font-size: 9px; }
   #hud-score { font-size: 12px; }
   #hud-controls { font-size: 7px; }
-  #replay-bar { min-width: 300px; padding: 8px 14px; }
   #loading-screen .title { font-size: 18px; }
   .light-indicator { font-size: 8px; padding: 4px 8px; }
 }

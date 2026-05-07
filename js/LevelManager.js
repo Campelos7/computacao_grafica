@@ -11,6 +11,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { BOARD_SIZE, CELL_SIZE, createCanvasTexture, disposeGroup, hexToColor } from './utils/helpers.js';
+import { DIFFICULTY_PRESETS } from './level/difficultyPresets.js';
+import { buildForestBiome } from './level/biomes/forest/index.js';
+import { buildDesertBiome } from './level/biomes/desert/index.js';
+import { buildSnowBiome } from './level/biomes/snow/index.js';
 
 /* ══════════════════════════════════════════════════════════════════════════
    TEXTURAS IMPORTADAS (R1 — obrigatório pelo protocolo)
@@ -39,6 +43,8 @@ function loadImportedTexture(name, path, repeatX = 1, repeatY = 1) {
 
 /** Gera um Normal Map procedural via Canvas (simula relevo com ruído) */
 function createProceduralNormalMap(size, intensity, noiseScale, biomeType) {
+  // Performance: limitar tamanho máximo a 128
+  size = Math.min(size, 128);
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -327,7 +333,7 @@ function createParticleSystem(biome, boardHalf) {
 
   if (biome === 'forest') {
     // ── Pirilampos (Fireflies) ──
-    const count = 40;
+    const count = 20; // Optimizado: reduzido de 40 para performance
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -389,7 +395,7 @@ function createParticleSystem(biome, boardHalf) {
 
   } else if (biome === 'desert') {
     // ── Areia soprada (Sand particles) ──
-    const count = 100;
+    const count = 50; // Optimizado: reduzido de 100 para performance
     const positions = new Float32Array(count * 3);
     const speeds = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -451,7 +457,7 @@ function createParticleSystem(biome, boardHalf) {
 
   } else if (biome === 'snow') {
     // ── Flocos de neve (Snowflakes) ──
-    const count = 120;
+    const count = 60; // Optimizado: reduzido de 120 para performance
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const phases = new Float32Array(count);
@@ -651,349 +657,10 @@ function createAuroraBorealis() {
   return g;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   BIOMAS — Decorações de cada bioma (versão melhorada)
-   ══════════════════════════════════════════════════════════════════════════ */
-
-function buildForestBiome(complexGroup, half) {
-  const barkTex = loadImportedTexture('bark', 'textures/bark.png', 1, 2);
-  const mossGroundTex = loadImportedTexture('moss_ground', 'textures/moss_ground.png', 2, 2);
-  const trunkMat = new THREE.MeshStandardMaterial({
-    map: barkTex, color: 0x6a5240, emissive: 0x1a1008, emissiveIntensity: 0.1,
-    roughness: 0.92, metalness: 0.0,
-  });
-  const leafMat = new THREE.MeshStandardMaterial({
-    color: 0x228844, emissive: 0x114422, emissiveIntensity: 0.15, roughness: 0.8, metalness: 0.0,
-  });
-  const darkLeafMat = new THREE.MeshStandardMaterial({
-    color: 0x1a6633, emissive: 0x0d3319, emissiveIntensity: 0.1, roughness: 0.85, metalness: 0.0,
-  });
-  const mossMat = new THREE.MeshStandardMaterial({
-    map: mossGroundTex, color: 0x446622, emissive: 0x223311, emissiveIntensity: 0.12,
-    roughness: 0.9, metalness: 0.0,
-  });
-  const fruitMat = new THREE.MeshStandardMaterial({
-    color: 0xff4422, emissive: 0xaa2211, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.1,
-  });
-
-  function createTree(x, z, scale, variant) {
-    const g = new THREE.Group(); g.name = 'forest-tree';
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12*scale, 0.22*scale, 2.8*scale, 8), trunkMat);
-    trunk.position.y = 1.4*scale; trunk.rotation.z = (Math.random()-0.5)*0.15;
-    trunk.castShadow = true; trunk.receiveShadow = true; g.add(trunk);
-    for (let i = 0; i < 4; i++) {
-      const a = (i/4)*Math.PI*2 + Math.random()*0.3;
-      const root = new THREE.Mesh(new THREE.CylinderGeometry(0.02*scale, 0.06*scale, 0.5*scale, 5), trunkMat);
-      root.position.set(Math.cos(a)*0.18*scale, 0.12*scale, Math.sin(a)*0.18*scale);
-      root.rotation.z = Math.cos(a)*0.6; root.rotation.x = Math.sin(a)*0.6; root.castShadow = true; g.add(root);
-    }
-    const mat = variant ? darkLeafMat : leafMat;
-    for (const [lx,ly,lz,lr] of [[0,3.0,0,0.85],[-.35,3.3,.25,.55],[.4,3.15,-.2,.6],[-.15,3.5,-.35,.45],[.25,3.45,.35,.5],[0,3.7,0,.35]]) {
-      const leaf = new THREE.Mesh(new THREE.SphereGeometry(lr*scale, 10, 8), mat);
-      leaf.position.set(lx*scale, ly*scale, lz*scale); leaf.castShadow = true; g.add(leaf);
-    }
-    for (let i = 0; i < 3; i++) {
-      const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.05*scale, 6, 5), fruitMat);
-      const a = Math.random()*Math.PI*2;
-      fruit.position.set(Math.cos(a)*0.35*scale, (2.6+Math.random())*scale, Math.sin(a)*0.35*scale); g.add(fruit);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createMushroom(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'forest-mushroom';
-    const stemMat = new THREE.MeshStandardMaterial({ color: 0xccbb88, roughness: 0.8 });
-    const capMat = new THREE.MeshStandardMaterial({ color: 0xcc3322, emissive: 0x661100, emissiveIntensity: 0.25, roughness: 0.6 });
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x44ff88, emissive: 0x22ff66, emissiveIntensity: 1.2, roughness: 0.3, transparent: true, opacity: 0.7 });
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04 * scale, 0.06 * scale, 0.3 * scale, 6), stemMat);
-    stem.position.set(0, 0.15 * scale, 0);
-    g.add(stem);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.12*scale, 8, 6, 0, Math.PI*2, 0, Math.PI/2), capMat);
-    cap.position.y = 0.3*scale; cap.castShadow = true; g.add(cap);
-    for (let i = 0; i < 4; i++) {
-      const a = (i/4)*Math.PI*2, dot = new THREE.Mesh(new THREE.SphereGeometry(0.015*scale, 4, 4), glowMat);
-      dot.position.set(Math.cos(a)*0.08*scale, 0.32*scale, Math.sin(a)*0.08*scale); dot.name = 'mushroom-glow'; g.add(dot);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createFallenLog(x, z, rot) {
-    const g = new THREE.Group(); g.name = 'forest-log';
-    const logObj = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.8, 7), trunkMat);
-    logObj.rotation.z = Math.PI/2; logObj.position.y = 0.12; logObj.castShadow = true; logObj.receiveShadow = true; g.add(logObj);
-    const moss = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.2), mossMat);
-    moss.position.y = 0.24; g.add(moss);
-    g.rotation.y = rot; g.position.set(x, 0, z); return g;
-  }
-
-  function createFern(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'forest-fern';
-    const fernMat = new THREE.MeshStandardMaterial({ color: 0x33aa44, emissive: 0x115522, emissiveIntensity: 0.1, roughness: 0.85, side: THREE.DoubleSide });
-    for (let i = 0; i < 6; i++) {
-      const a = (i/6)*Math.PI*2;
-      const frond = new THREE.Mesh(new THREE.PlaneGeometry(0.15*scale, 0.5*scale), fernMat);
-      frond.position.set(Math.cos(a)*0.08*scale, 0.2*scale, Math.sin(a)*0.08*scale);
-      frond.rotation.y = a; frond.rotation.x = -0.6; g.add(frond);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createMossyRock(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'forest-rock';
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x555544, roughness: 0.95, metalness: 0.05 });
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2*scale, 1), rockMat);
-    rock.position.y = 0.12*scale; rock.scale.y = 0.6; rock.castShadow = true; rock.receiveShadow = true; g.add(rock);
-    const mTop = new THREE.Mesh(new THREE.SphereGeometry(0.15*scale, 6, 4, 0, Math.PI*2, 0, Math.PI*0.4), mossMat);
-    mTop.position.y = 0.16*scale; g.add(mTop);
-    g.position.set(x, 0, z); return g;
-  }
-
-  const m = half + 1.5;
-  [[-m,-m,1],[- m,m-2,.9],[m,-m+1,1.1],[m,m,.85],[-m-1,0,.95],[m+1,0,1.05],[-m+.5,m+2,.7],[m-.5,-m-2,.75]].forEach(([x,z,s], i) => complexGroup.add(createTree(x, z, s, i%2===0)));
-  [[-m+3,-m+1,1.2],[m-2,m-2,1],[-3,-m+.5,.8],[5,m-.5,1.1],[-m+1,4,.9]].forEach(([x,z,s]) => complexGroup.add(createMushroom(x, z, s)));
-  complexGroup.add(createFallenLog(-m+2, -4, 0.3));
-  complexGroup.add(createFallenLog(m-3, 5, -0.5));
-  [[-m+1,-2,1],[m-1,3,1.2],[-5,m-1,.8],[6,-m+1,1.1]].forEach(([x,z,s]) => complexGroup.add(createFern(x, z, s)));
-  [[-m+2,2,1.3],[m-1.5,-6,1],[-4,m-1,.8],[3,-m+2,1.1]].forEach(([x,z,s]) => complexGroup.add(createMossyRock(x, z, s)));
-
-  // Névoa atmosférica
-  const fog = createAtmosphericEffect('#225533', '#44aa44', 0.2, 28, 28);
-  fog.position.set(0, 0.8, 0); complexGroup.add(fog);
-
-  // Partículas: pirilampos
-  const particles = createParticleSystem('forest', half);
-  complexGroup.add(particles);
-}
-
-function buildDesertBiome(complexGroup, half) {
-  const sandstoneTex = loadImportedTexture('sandstone', 'textures/sandstone.png', 1, 2);
-  const rockMat = new THREE.MeshStandardMaterial({
-    map: sandstoneTex, color: 0xaa8855, emissive: 0x2a1a08, emissiveIntensity: 0.08,
-    roughness: 0.95, metalness: 0.05,
-  });
-  const darkRockMat = new THREE.MeshStandardMaterial({
-    color: 0x6b5530, roughness: 0.95, metalness: 0.05,
-  });
-
-  function createRockFormation(x, z, scale, type) {
-    const g = new THREE.Group(); g.name = 'desert-rock';
-    if (type === 'mesa') {
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.6*scale, 0.9*scale, 2.5*scale, 7), rockMat);
-      base.position.y = 1.25*scale; base.castShadow = true; base.receiveShadow = true; g.add(base);
-      for (let y = 0.4; y < 2.2; y += 0.4) {
-        const layer = new THREE.Mesh(new THREE.CylinderGeometry(0.65*scale, 0.65*scale, 0.05*scale, 7), darkRockMat);
-        layer.position.y = y*scale; g.add(layer);
-      }
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.7*scale, 0.6*scale, 0.2*scale, 8), rockMat);
-      top.position.y = 2.6*scale; top.castShadow = true; g.add(top);
-    } else if (type === 'spire') {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale, 0.35*scale, 3.5*scale, 6), rockMat);
-      col.position.y = 1.75*scale; col.rotation.z = (Math.random()-0.5)*0.12; col.castShadow = true; g.add(col);
-      for (let i = 0; i < 4; i++) {
-        const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12*scale+Math.random()*0.08*scale, 0), darkRockMat);
-        const a = (i/4)*Math.PI*2;
-        s.position.set(Math.cos(a)*0.3*scale, 0.08*scale, Math.sin(a)*0.3*scale); s.castShadow = true; g.add(s);
-      }
-    } else {
-      const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.3*scale, 0.45*scale, 3.2*scale, 7), rockMat);
-      pL.position.set(-0.9*scale, 1.6*scale, 0); pL.rotation.z = 0.08; pL.castShadow = true; g.add(pL);
-      const pR = new THREE.Mesh(new THREE.CylinderGeometry(0.25*scale, 0.4*scale, 3.0*scale, 7), rockMat);
-      pR.position.set(0.9*scale, 1.5*scale, 0); pR.rotation.z = -0.1; pR.castShadow = true; g.add(pR);
-      const arch = new THREE.Mesh(new THREE.TorusGeometry(0.95*scale, 0.22*scale, 8, 16, Math.PI), rockMat);
-      arch.position.set(0, 3.0*scale, 0); arch.rotation.z = Math.PI; arch.castShadow = true; g.add(arch);
-      for (let i = 0; i < 5; i++) {
-        const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.1*scale+Math.random()*0.12*scale, 0), darkRockMat);
-        s.position.set((Math.random()-0.5)*2*scale, 0.08*scale, (Math.random()-0.5)*1.2*scale);
-        s.rotation.set(Math.random(), Math.random(), Math.random()); s.castShadow = true; g.add(s);
-      }
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createCactus(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'desert-cactus';
-    const cMat = new THREE.MeshStandardMaterial({ color: 0x2a6622, emissive: 0x0a2208, emissiveIntensity: 0.08, roughness: 0.85 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1*scale, 0.12*scale, 1.2*scale, 8), cMat);
-    body.position.y = 0.6*scale; body.castShadow = true; g.add(body);
-    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.06*scale, 0.07*scale, 0.5*scale, 6), cMat);
-    armL.position.set(-0.18*scale, 0.7*scale, 0); armL.rotation.z = Math.PI/3; armL.castShadow = true; g.add(armL);
-    const armLUp = new THREE.Mesh(new THREE.CylinderGeometry(0.05*scale, 0.06*scale, 0.35*scale, 6), cMat);
-    armLUp.position.set(-0.32*scale, 0.95*scale, 0); armLUp.castShadow = true; g.add(armLUp);
-    if (scale > 0.8) {
-      const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.05*scale, 0.06*scale, 0.4*scale, 6), cMat);
-      armR.position.set(0.15*scale, 0.5*scale, 0); armR.rotation.z = -Math.PI/3.5; armR.castShadow = true; g.add(armR);
-    }
-    const flowerMat = new THREE.MeshStandardMaterial({ color: 0xff66aa, emissive: 0xcc3388, emissiveIntensity: 0.4, roughness: 0.4 });
-    const flower = new THREE.Mesh(new THREE.SphereGeometry(0.05*scale, 6, 5), flowerMat);
-    flower.position.y = 1.25*scale; g.add(flower);
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createSkull(x, z) {
-    const g = new THREE.Group(); g.name = 'desert-skull';
-    const boneMat = new THREE.MeshStandardMaterial({ color: 0xddccaa, emissive: 0x332211, emissiveIntensity: 0.05, roughness: 0.8 });
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), boneMat);
-    skull.position.y = 0.1; skull.scale.set(1, 0.85, 1.1); g.add(skull);
-    for (const ry of [0.4, -0.4]) {
-      const bone = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 4), boneMat);
-      bone.position.y = 0.02; bone.rotation.z = Math.PI/2; bone.rotation.y = ry; g.add(bone);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createSandDune(x, z, w, h) {
-    const g = new THREE.Group(); g.name = 'desert-dune';
-    const duneMat = new THREE.MeshStandardMaterial({ color: 0xbb9955, roughness: 0.95 });
-    const dune = new THREE.Mesh(new THREE.SphereGeometry(w, 10, 8, 0, Math.PI*2, 0, Math.PI*0.4), duneMat);
-    dune.position.y = -0.1; dune.scale.y = h/w; dune.receiveShadow = true; g.add(dune);
-    g.position.set(x, 0, z); return g;
-  }
-
-  const m = half + 1.5;
-  complexGroup.add(createRockFormation(-m, -m, 0.9, 'arch'));
-  complexGroup.add(createRockFormation(m, m-1, 0.85, 'mesa'));
-  complexGroup.add(createRockFormation(m+0.5, -m, 1.0, 'spire'));
-  complexGroup.add(createRockFormation(-m-0.5, m, 0.75, 'spire'));
-  complexGroup.add(createRockFormation(-m, 0, 0.7, 'mesa'));
-  complexGroup.add(createRockFormation(m, 0, 0.65, 'spire'));
-  [[-m+2,-5,1],[m-2,4,.85],[-6,m-1,1.2],[5,-m+1,.9],[-m+1,6,.7],[m-1,-7,1.1],[-3,-m+2,.8],[7,m-2,.95],[0,m-.5,.6]].forEach(([cx,cz,s]) => complexGroup.add(createCactus(cx, cz, s)));
-  complexGroup.add(createSkull(-m+3, 3));
-  complexGroup.add(createSkull(m-4, -5));
-  complexGroup.add(createSkull(2, -m+1.5));
-  complexGroup.add(createSandDune(-m+1, -3, 1.5, 0.35));
-  complexGroup.add(createSandDune(m-1, 5, 1.8, 0.4));
-  complexGroup.add(createSandDune(0, m-0.5, 2.0, 0.3));
-  complexGroup.add(createSandDune(-5, -m+0.5, 1.4, 0.35));
-  for (let i = 0; i < 12; i++) {
-    const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.08+Math.random()*0.12, 0), darkRockMat);
-    s.position.set((Math.random()-0.5)*(half*2+4), 0.05+Math.random()*0.06, (Math.random()-0.5)*(half*2+4));
-    s.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0); s.castShadow = true; s.name = 'desert-pebble';
-    complexGroup.add(s);
-  }
-
-
-
-  // Névoa de poeira
-  const fog = createAtmosphericEffect('#aa7744', '#cc9955', 0.15, 28, 28);
-  fog.position.set(0, 1.0, 0); complexGroup.add(fog);
-
-  // Partículas: areia soprada
-  const particles = createParticleSystem('desert', half);
-  complexGroup.add(particles);
-}
-
-function buildSnowBiome(complexGroup, half) {
-  const iceTex = loadImportedTexture('ice', 'textures/ice.png', 1, 1);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.9 });
-  const pineMat = new THREE.MeshStandardMaterial({ color: 0x1a4428, emissive: 0x0a2214, emissiveIntensity: 0.08, roughness: 0.85 });
-  const snowMat = new THREE.MeshStandardMaterial({ color: 0xeef4ff, emissive: 0x8899aa, emissiveIntensity: 0.15, roughness: 0.6, metalness: 0.1 });
-  const iceMat = new THREE.MeshStandardMaterial({
-    map: iceTex, color: 0xaaddff, emissive: 0x4488cc, emissiveIntensity: 0.4,
-    roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.7,
-  });
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.9 });
-
-  function createPine(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'snow-pine';
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08*scale, 0.14*scale, 2.0*scale, 6), trunkMat);
-    trunk.position.y = 1.0*scale; trunk.castShadow = true; g.add(trunk);
-    for (const l of [{y:1.8,r:0.9,h:1.0},{y:2.4,r:0.7,h:0.8},{y:2.9,r:0.5,h:0.65},{y:3.3,r:0.3,h:0.5}]) {
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(l.r*scale, l.h*scale, 8), pineMat);
-      cone.position.y = l.y*scale; cone.castShadow = true; g.add(cone);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(l.r*0.65*scale, l.h*0.25*scale, 8), snowMat);
-      cap.position.y = (l.y+l.h*0.35)*scale; g.add(cap);
-    }
-    const tip = new THREE.Mesh(new THREE.OctahedronGeometry(0.08*scale, 0), iceMat);
-    tip.position.y = 3.7*scale; tip.name = 'pine-tip'; g.add(tip);
-    const baseSnow = new THREE.Mesh(new THREE.CylinderGeometry(0.8*scale, 1.0*scale, 0.12*scale, 10), snowMat);
-    baseSnow.position.y = 0.06*scale; baseSnow.receiveShadow = true; g.add(baseSnow);
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createIceCrystal(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'snow-crystal';
-    const crystal = new THREE.Mesh(new THREE.CylinderGeometry(0.08*scale, 0.08*scale, 0.8*scale, 6), iceMat);
-    crystal.position.y = 0.4*scale; crystal.castShadow = true; g.add(crystal);
-    const top = new THREE.Mesh(new THREE.ConeGeometry(0.08*scale, 0.2*scale, 6), iceMat);
-    top.position.y = 0.9*scale; g.add(top);
-    for (let i = 0; i < 3; i++) {
-      const a = (i/3)*Math.PI*2+Math.random()*0.5;
-      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.04*scale, 0.04*scale, 0.4*scale, 6), iceMat);
-      sc.position.set(Math.cos(a)*0.12*scale, 0.25*scale, Math.sin(a)*0.12*scale);
-      sc.rotation.z = Math.cos(a)*0.5; sc.rotation.x = Math.sin(a)*0.5; g.add(sc);
-    }
-    const light = new THREE.PointLight(0x88ccff, 0.6, 4);
-    light.position.y = 0.5*scale; light.name = 'crystal-light'; g.add(light);
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createSnowBank(x, z, w, h) {
-    const g = new THREE.Group(); g.name = 'snow-bank';
-    const bank = new THREE.Mesh(new THREE.SphereGeometry(w, 10, 8, 0, Math.PI*2, 0, Math.PI*0.35), snowMat);
-    bank.position.y = -0.05; bank.scale.y = h/w; bank.receiveShadow = true; g.add(bank);
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createFrozenRock(x, z, scale) {
-    const g = new THREE.Group(); g.name = 'snow-rock';
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3*scale, 1), rockMat);
-    rock.position.y = 0.15*scale; rock.scale.y = 0.7; rock.castShadow = true; rock.receiveShadow = true; g.add(rock);
-    const snowTop = new THREE.Mesh(new THREE.SphereGeometry(0.25*scale, 6, 4, 0, Math.PI*2, 0, Math.PI*0.35), snowMat);
-    snowTop.position.y = 0.2*scale; g.add(snowTop);
-    for (let i = 0; i < 3; i++) {
-      const icicle = new THREE.Mesh(new THREE.ConeGeometry(0.015*scale, 0.12*scale, 4), iceMat);
-      const a = (i/3)*Math.PI*2;
-      icicle.position.set(Math.cos(a)*0.22*scale, 0.05*scale, Math.sin(a)*0.22*scale);
-      icicle.rotation.x = Math.PI; g.add(icicle);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  function createSnowman(x, z) {
-    const g = new THREE.Group(); g.name = 'snow-snowman';
-    const bodyMat = snowMat.clone();
-    for (const [r, y] of [[0.25,0.25],[0.18,0.6],[0.12,0.85]]) {
-      const part = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), bodyMat);
-      part.position.y = y; part.castShadow = true; g.add(part);
-    }
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
-    for (const ex of [-0.04, 0.04]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.015, 4, 4), eyeMat);
-      eye.position.set(ex, 0.88, -0.1); g.add(eye);
-    }
-    const noseMat = new THREE.MeshStandardMaterial({ color: 0xff6622, emissive: 0x882200, emissiveIntensity: 0.2, roughness: 0.5 });
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.12, 5), noseMat);
-    nose.position.set(0, 0.85, -0.13); nose.rotation.x = -Math.PI/2; g.add(nose);
-    const stickMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.9 });
-    for (const [px, rz] of [[-0.28, Math.PI/3], [0.25, -Math.PI/3.5]]) {
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.35, 4), stickMat);
-      arm.position.set(px, 0.6, 0); arm.rotation.z = rz; g.add(arm);
-    }
-    g.position.set(x, 0, z); return g;
-  }
-
-  const m = half + 1.5;
-  [[-m,-m,1],[-m,m,.85],[m,-m,.95],[m,m,1.1],[-m-1,0,.8],[m+1,0,.9],[-m,-4,.7],[m,5,.75],[0,-m-1,.65],[0,m+1,.7],[-m+1,m+1,.6],[m-1,-m-1,.55]].forEach(([px,pz,s]) => complexGroup.add(createPine(px, pz, s)));
-  [[-m+2,-3,1.2],[m-3,5,1],[-5,m-1,.8],[6,-m+2,1.1],[-m+1,7,.9],[m-1,-6,1.3],[-8,2,.7],[3,m-2,.85]].forEach(([cx,cz,s]) => complexGroup.add(createIceCrystal(cx, cz, s)));
-  complexGroup.add(createSnowBank(-m+1, -4, 1.5, 0.3));
-  complexGroup.add(createSnowBank(m-2, 3, 1.8, 0.35));
-  complexGroup.add(createSnowBank(0, m-0.5, 2.2, 0.25));
-  complexGroup.add(createSnowBank(-4, -m+0.5, 1.3, 0.3));
-  complexGroup.add(createSnowBank(5, -3, 1.0, 0.2));
-  [[-m+3,2,1.2],[m-2,-5,.9],[-3,m-1.5,1],[5,-m+2,.8],[0,0,.6]].forEach(([rx,rz,s]) => complexGroup.add(createFrozenRock(rx, rz, s)));
-  complexGroup.add(createSnowman(m-3, m-3));
-
-  // ── Aurora Boreal (decoração complexa do bioma) ──
-  complexGroup.add(createAuroraBorealis());
-
-  // Nevoeiro frio
-  const fog = createAtmosphericEffect('#667788', '#aabbcc', 0.2, 28, 28);
-  fog.position.set(0, 0.5, 0); complexGroup.add(fog);
-
-  // Partículas: flocos de neve
-  const particles = createParticleSystem('snow', half);
-  complexGroup.add(particles);
-}
+/* Biomas separados por ficheiro:
+   - level/biomes/forest.js
+   - level/biomes/desert.js
+   - level/biomes/snow.js */
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export class LevelManager {
@@ -1005,6 +672,7 @@ export class LevelManager {
     this.levels = [];
     this.currentLevelIndex = 0;
     this.currentLevel = null;
+    this.currentDifficultyId = 'easy';
     this.boardGroup = new THREE.Group(); this.boardGroup.name = 'board'; this.scene.add(this.boardGroup);
     this.decorGroup = new THREE.Group(); this.decorGroup.name = 'decorations'; this.scene.add(this.decorGroup);
     this.complexGroup = new THREE.Group(); this.complexGroup.name = 'complex-objects'; this.scene.add(this.complexGroup);
@@ -1023,6 +691,25 @@ export class LevelManager {
       pineTips: [],
       mushroomGlows: [],
       crystalLights: [],
+      // Novos objectos animados
+      creekWaterMats: [],       // Shader do riacho (floresta)
+      butterflyMats: [],        // Borboletas (floresta)
+      tumbleweedMats: [],       // Tumbleweeds (deserto)
+      oasisWaterMats: [],       // Água do oásis (deserto)
+      campfireParticleMats: [], // Partículas fogo (neve)
+      campfireLights: [],       // Luz da fogueira (neve)
+      frozenLakeMats: [],       // Shader do lago gelado (neve)
+      treeCanopies: [],         // Copas de árvores p/ animação vento
+      fernFronds: [],           // Folhas dos fetos p/ animação vento
+      pineLayers: [],           // Camadas dos pinheiros p/ animação vento
+      rabbitTails: [],          // Caudas dos coelhos
+      palmLeaves: [],           // Folhas das palmeiras
+      // Decoração exterior
+      torchLights: [],          // Luzes das tochas (floresta)
+      torchFlames: [],          // Chamas das tochas (floresta)
+      braseiroLights: [],       // Luzes dos braseiros (deserto)
+      braseiroFlames: [],       // Chamas dos braseiros (deserto)
+      icePillarLights: [],      // Luzes dos pilares gelo (neve)
     };
   }
 
@@ -1034,8 +721,8 @@ export class LevelManager {
     } catch (err) {
       console.warn('Erro ao carregar levelConfig.json, usando nível padrão:', err);
       this.levels = [{
-        id: 1, name: 'DEFAULT', speed: 0.15, boardSize: 20, scoreToAdvance: 999,
-        biome: 'forest', obstacles: [], powerups: [],
+        id: 1, name: 'DEFAULT',
+        biome: 'forest',
         theme: {
           background: '#0a1a0f', fogColor: '#1a3a1a', fogNear: 18, fogFar: 55,
           groundColor: '#1a2a10', groundEmissive: '#0a1a05', gridColor: '#44ff44', gridOpacity: 0.14,
@@ -1064,8 +751,32 @@ export class LevelManager {
     }
   }
 
-  _loadGLTF(path) {
-    return new Promise((resolve, reject) => { this.gltfLoader.load(path, resolve, undefined, reject); });
+  _loadGLTF(path, timeoutMs = 7000) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`Timeout a carregar modelo: ${path}`));
+      }, timeoutMs);
+
+      this.gltfLoader.load(
+        path,
+        (gltf) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(gltf);
+        },
+        undefined,
+        (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      );
+    });
   }
 
   _createProceduralModel(name) {
@@ -1162,16 +873,20 @@ export class LevelManager {
     return { top, mid, bottom };
   }
 
-  async loadLevel(levelIndex, skipTransition = false) {
+  _getDifficultyConfig(difficultyId = 'easy') {
+    return DIFFICULTY_PRESETS[difficultyId] || DIFFICULTY_PRESETS.easy;
+  }
+
+  async loadLevel(levelIndex, difficultyId = 'easy', skipTransition = false) {
     this.currentLevelIndex = levelIndex;
     this.currentLevel = this.levels[levelIndex] || this.levels[0];
+    this.currentDifficultyId = difficultyId;
     const level = this.currentLevel;
+    const difficulty = this._getDifficultyConfig(difficultyId);
     const theme = level.theme;
     const biome = level.biome || 'forest';
 
-    if (!skipTransition) {
-      await this.ui.showLevelTransition(level.name, level.description);
-    }
+    // Transição de nível removida — mapa carrega directamente
 
     // Cleanup
     disposeGroup(this.boardGroup);
@@ -1254,7 +969,7 @@ export class LevelManager {
     this.scene.add(this.gridHelper);
 
     // ---- Obstáculos ----
-    this.obstacles.generate(level.obstacles || [], biome);
+    this.obstacles.generate(difficulty.obstacles || [], biome);
 
     // ---- Decorações GLTF ----
     this._placeDecorations();
@@ -1270,17 +985,23 @@ export class LevelManager {
     this.lightManager.applyTheme(theme);
 
     // ---- UI ----
-    this.ui.setLevel(`LEVEL ${level.id}: ${level.name}`);
+    this.ui.setLevel(`MAPA: ${level.name} | DIFICULDADE: ${difficulty.name}`);
 
     return level;
   }
 
   _buildBiomeEnvironment(biome, half) {
+    const helpers = {
+      loadImportedTexture,
+      createAtmosphericEffect,
+      createParticleSystem,
+      createAuroraBorealis,
+    };
     switch (biome) {
-      case 'forest': buildForestBiome(this.complexGroup, half); break;
-      case 'desert': buildDesertBiome(this.complexGroup, half); break;
-      case 'snow':   buildSnowBiome(this.complexGroup, half);   break;
-      default:       buildForestBiome(this.complexGroup, half);  break;
+      case 'forest': buildForestBiome(this.complexGroup, half, helpers); break;
+      case 'desert': buildDesertBiome(this.complexGroup, half, helpers); break;
+      case 'snow': buildSnowBiome(this.complexGroup, half, helpers); break;
+      default: buildForestBiome(this.complexGroup, half, helpers); break;
     }
   }
 
@@ -1304,7 +1025,7 @@ export class LevelManager {
   }
 
   updateDecorations(elapsed) {
-    // Decorações GLTF (cacheado)
+    // ── Decorações GLTF (trophy) ──
     for (const child of this._animRefs.trophyStars) {
       child.rotation.y += 0.02;
       child.rotation.x = Math.sin(elapsed * 2) * 0.2;
@@ -1313,7 +1034,7 @@ export class LevelManager {
       child.rotation.z += 0.03;
     }
 
-    // Ambiente/bioma (cacheado)
+    // ── Shaders atmosféricos (fog, partículas, aurora) ──
     for (const mat of this._animRefs.fogUniformMats) {
       if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
     }
@@ -1324,24 +1045,113 @@ export class LevelManager {
       if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
     }
 
+    // ── Pontas dos pinheiros (rotação + pulsação) ──
     for (const child of this._animRefs.pineTips) {
       child.rotation.y += 0.03;
       child.rotation.x = Math.sin(elapsed * 2) * 0.15;
       child.scale.setScalar(1 + Math.sin(elapsed * 4) * 0.15);
     }
+
+    // ── Cogumelos bioluminescentes (pulsação de brilho) ──
     for (const child of this._animRefs.mushroomGlows) {
       const m = child.material;
       if (!m) continue;
       m.emissiveIntensity = 0.8 + Math.sin(elapsed * 3 + child.position.x * 5) * 0.5;
       m.opacity = 0.5 + Math.sin(elapsed * 2.5 + child.position.z * 3) * 0.3;
     }
+
+    // ── Luzes dos cristais de gelo (variação intensidade) ──
     for (const child of this._animRefs.crystalLights) {
       child.intensity = 0.4 + Math.sin(elapsed * 2.5) * 0.3;
+    }
+
+    // ── NOVOS: Copas das árvores (balanço de vento) ──
+    for (const child of this._animRefs.treeCanopies) {
+      child.rotation.z = Math.sin(elapsed * 0.8 + child.position.x * 0.5) * 0.04;
+      child.rotation.x = Math.cos(elapsed * 0.6 + child.position.z * 0.3) * 0.03;
+    }
+
+    // ── NOVOS: Folhas dos fetos (ondulação de vento) ──
+    for (const child of this._animRefs.fernFronds) {
+      child.rotation.x = -0.6 + Math.sin(elapsed * 1.2 + child.position.x * 2) * 0.1;
+    }
+
+    // ── NOVOS: Camadas dos pinheiros (leve balanço) ──
+    for (const child of this._animRefs.pineLayers) {
+      child.rotation.z = Math.sin(elapsed * 0.5 + child.position.y * 2) * 0.02;
+    }
+
+    // ── NOVOS: Shaders de água (riacho floresta) ──
+    for (const mat of this._animRefs.creekWaterMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Borboletas (shader partículas floresta) ──
+    for (const mat of this._animRefs.butterflyMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Tumbleweeds (shader partículas deserto) ──
+    for (const mat of this._animRefs.tumbleweedMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Água do oásis (shader deserto) ──
+    for (const mat of this._animRefs.oasisWaterMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Partículas de fogo da fogueira (neve) ──
+    for (const mat of this._animRefs.campfireParticleMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Luz da fogueira (flickering) ──
+    for (const child of this._animRefs.campfireLights) {
+      child.intensity = 1.0 + Math.sin(elapsed * 8) * 0.3 + Math.sin(elapsed * 13) * 0.15;
+    }
+
+    // ── NOVOS: Lago gelado (shader rachaduras neve) ──
+    for (const mat of this._animRefs.frozenLakeMats) {
+      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
+    }
+
+    // ── NOVOS: Caudas dos coelhos (balanço) ──
+    for (const child of this._animRefs.rabbitTails) {
+      child.rotation.x = Math.sin(elapsed * 4 + child.position.z) * 0.15;
+    }
+
+    // ── NOVOS: Folhas das palmeiras (vento) ──
+    for (const child of this._animRefs.palmLeaves) {
+      child.rotation.x = -0.8 + Math.sin(elapsed * 1.0 + child.position.x * 2) * 0.15;
+      child.rotation.z = Math.cos(elapsed * 0.7 + child.position.z) * 0.05;
+    }
+
+    // ── EXTERIOR: Tochas da floresta (flickering) ──
+    for (const child of this._animRefs.torchLights) {
+      child.intensity = 0.4 + Math.sin(elapsed * 7 + child.position.x) * 0.15 + Math.sin(elapsed * 11) * 0.1;
+    }
+    for (const child of this._animRefs.torchFlames) {
+      child.scale.setScalar(0.9 + Math.sin(elapsed * 6 + child.position.z) * 0.2);
+    }
+
+    // ── EXTERIOR: Braseiros do deserto (flickering) ──
+    for (const child of this._animRefs.braseiroLights) {
+      child.intensity = 0.6 + Math.sin(elapsed * 6) * 0.25 + Math.sin(elapsed * 10) * 0.15;
+    }
+    for (const child of this._animRefs.braseiroFlames) {
+      child.scale.y = 0.8 + Math.sin(elapsed * 8 + child.position.x) * 0.3;
+      child.rotation.y += 0.02;
+    }
+
+    // ── EXTERIOR: Pilares de gelo da neve (pulsação luz) ──
+    for (const child of this._animRefs.icePillarLights) {
+      child.intensity = 0.3 + Math.sin(elapsed * 1.5 + child.position.z * 0.5) * 0.15;
     }
   }
 
   _rebuildAnimRefsCache() {
-    // Reset
+    // Reset de todas as referências
     for (const k of Object.keys(this._animRefs)) this._animRefs[k] = [];
 
     // Decorações (trophy)
@@ -1350,20 +1160,62 @@ export class LevelManager {
       if (child.name === 'trophy-ring') this._animRefs.trophyRings.push(child);
     });
 
-    // Complexos / bioma
+    // Complexos / bioma — traverse uma única vez, categorizar por nome
     this.complexGroup.traverse(child => {
-      if (child.name === 'fog-plane' || child.name === 'fog-plane-upper') {
+      const n = child.name;
+
+      // Shaders atmosféricos
+      if (n === 'fog-plane' || n === 'fog-plane-upper') {
         if (child.material?.uniforms?.uTime) this._animRefs.fogUniformMats.push(child.material);
       }
-      if (child.name === 'fireflies' || child.name === 'sand-particles' || child.name === 'snowflakes') {
+      if (n === 'fireflies' || n === 'sand-particles' || n === 'snowflakes') {
         if (child.material?.uniforms?.uTime) this._animRefs.particleUniformMats.push(child.material);
       }
-      if (child.name === 'aurora-plane' || child.name === 'aurora-plane-2') {
+      if (n === 'aurora-plane' || n === 'aurora-plane-2') {
         if (child.material?.uniforms?.uTime) this._animRefs.auroraUniformMats.push(child.material);
       }
-      if (child.name === 'pine-tip') this._animRefs.pineTips.push(child);
-      if (child.name === 'mushroom-glow') this._animRefs.mushroomGlows.push(child);
-      if (child.name === 'crystal-light') this._animRefs.crystalLights.push(child);
+
+      // Objectos existentes
+      if (n === 'pine-tip') this._animRefs.pineTips.push(child);
+      if (n === 'mushroom-glow') this._animRefs.mushroomGlows.push(child);
+      if (n === 'crystal-light') this._animRefs.crystalLights.push(child);
+
+      // NOVOS: Animações de vento em vegetação
+      if (n === 'tree-canopy') this._animRefs.treeCanopies.push(child);
+      if (n === 'fern-frond') this._animRefs.fernFronds.push(child);
+      if (n === 'pine-layer') this._animRefs.pineLayers.push(child);
+      if (n === 'palm-leaf') this._animRefs.palmLeaves.push(child);
+
+      // NOVOS: Shaders de água e partículas
+      if (n === 'creek-water') {
+        if (child.material?.uniforms?.uTime) this._animRefs.creekWaterMats.push(child.material);
+      }
+      if (n === 'butterflies') {
+        if (child.material?.uniforms?.uTime) this._animRefs.butterflyMats.push(child.material);
+      }
+      if (n === 'tumbleweeds') {
+        if (child.material?.uniforms?.uTime) this._animRefs.tumbleweedMats.push(child.material);
+      }
+      if (n === 'oasis-water') {
+        if (child.material?.uniforms?.uTime) this._animRefs.oasisWaterMats.push(child.material);
+      }
+      if (n === 'campfire-particles') {
+        if (child.material?.uniforms?.uTime) this._animRefs.campfireParticleMats.push(child.material);
+      }
+      if (n === 'campfire-light') this._animRefs.campfireLights.push(child);
+      if (n === 'frozen-lake-surface') {
+        if (child.material?.uniforms?.uTime) this._animRefs.frozenLakeMats.push(child.material);
+      }
+
+      // NOVOS: Animais
+      if (n === 'rabbit-tail') this._animRefs.rabbitTails.push(child);
+
+      // EXTERIOR: Tochas, braseiros, pilares de gelo
+      if (n === 'torch-light') this._animRefs.torchLights.push(child);
+      if (n === 'torch-flame') this._animRefs.torchFlames.push(child);
+      if (n === 'braseiro-light') this._animRefs.braseiroLights.push(child);
+      if (n === 'braseiro-flame') this._animRefs.braseiroFlames.push(child);
+      if (n === 'ice-pillar-light') this._animRefs.icePillarLights.push(child);
     });
   }
 
@@ -1378,17 +1230,10 @@ export class LevelManager {
     });
   }
 
-  shouldAdvance(score) {
-    return this.currentLevel ? score >= this.currentLevel.scoreToAdvance : false;
-  }
-
-  async advanceLevel() {
-    const nextIndex = this.currentLevelIndex + 1;
-    if (nextIndex >= this.levels.length) return null;
-    return this.loadLevel(nextIndex);
-  }
-
-  get speed() { return this.currentLevel ? this.currentLevel.speed : 0.15; }
-  get powerups() { return this.currentLevel ? (this.currentLevel.powerups || []) : []; }
+  get speed() { return this._getDifficultyConfig(this.currentDifficultyId).speed; }
+  get powerups() { return this._getDifficultyConfig(this.currentDifficultyId).powerups || []; }
   get biome() { return this.currentLevel ? (this.currentLevel.biome || 'forest') : 'forest'; }
+  get difficulties() {
+    return Object.values(DIFFICULTY_PRESETS).map(d => ({ id: d.id, name: d.name }));
+  }
 }

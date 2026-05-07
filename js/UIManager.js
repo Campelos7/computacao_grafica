@@ -1,7 +1,8 @@
 /* ==========================================================================
    UIManager.js — Gestão completa da interface (HUD, overlays, notificações)
-   Requisito: UI com feedback visual para luzes, replay, pausas, game over
+   Requisito: UI com feedback visual para luzes, pausas, game over
    ========================================================================== */
+import * as THREE from 'three';
 
 export class UIManager {
   constructor() {
@@ -41,15 +42,8 @@ export class UIManager {
     this.panelSkins    = document.getElementById('panel-skins');
     this.panelSettings = document.getElementById('panel-settings');
     this.levelGrid     = document.getElementById('level-grid');
+    this.difficultyGrid = document.getElementById('difficulty-grid');
     this.skinGrid      = document.getElementById('skin-grid');
-
-    // ---- Replay Bar ----
-    this.replayBar      = document.getElementById('replay-bar');
-    this.replayTimeline = document.getElementById('replay-timeline');
-    this.replayFrame    = document.getElementById('replay-frame');
-    this.btnReplayPlay  = document.getElementById('btn-replay-play');
-    this.btnReplayRew   = document.getElementById('btn-replay-rew');
-    this.btnReplaySpeed = document.getElementById('btn-replay-speed');
 
     // ---- Settings ----
     this.settingPostFx  = document.getElementById('setting-postfx');
@@ -188,8 +182,7 @@ export class UIManager {
       card.innerHTML = `
         <div class="lc-num">${level.id}</div>
         <div class="lc-name">${level.name}</div>
-        <div class="lc-desc">${level.description || 'Classic snake gameplay'}</div>
-        <div class="lc-speed">SPEED: ${Math.round((1 / level.speed) * 10) / 10}/s</div>
+        <div class="lc-desc">${level.description || 'Escolhe este mapa para jogar'}</div>
       `;
       card.addEventListener('click', () => {
         this.levelGrid.querySelectorAll('.level-card').forEach(c => c.classList.remove('selected'));
@@ -200,23 +193,99 @@ export class UIManager {
     });
   }
 
+  populateDifficultyGrid(difficulties, selectedId, onSelect) {
+    if (!this.difficultyGrid) return;
+    this.difficultyGrid.innerHTML = '';
+    difficulties.forEach((difficulty) => {
+      const card = document.createElement('div');
+      card.className = `difficulty-card${difficulty.id === selectedId ? ' selected' : ''}`;
+      card.innerHTML = `
+        <div class="dc-name">${difficulty.name}</div>
+      `;
+      card.addEventListener('click', () => {
+        this.difficultyGrid.querySelectorAll('.difficulty-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        if (onSelect) onSelect(difficulty.id);
+      });
+      this.difficultyGrid.appendChild(card);
+    });
+  }
+
   /**
-   * Popula o grid de seleção de skins.
+   * Popula o grid de seleção de skins com preview 3D da cabeça.
+   * Usa um renderer offscreen para capturar uma snapshot de cada cabeça.
    * @param {Array} skins — array de configs de skin
    * @param {number} selectedIndex — índice selecionado
    * @param {Function} onSelect — callback quando uma skin é selecionada
+   * @param {Function} [createHeadFn] — função (skin) => THREE.Mesh que cria a cabeça 3D
    */
-  populateSkinGrid(skins, selectedIndex, onSelect) {
+  populateSkinGrid(skins, selectedIndex, onSelect, createHeadFn) {
     if (!this.skinGrid) return;
     this.skinGrid.innerHTML = '';
+
+    // Limpar renderers anteriores
+    if (this._skinRenderers) {
+      this._skinRenderers.forEach(r => r.dispose());
+    }
+    this._skinRenderers = [];
+    if (this._skinAnimId) cancelAnimationFrame(this._skinAnimId);
+
+    const previewCanvases = [];
+
     skins.forEach((skin, i) => {
       const card = document.createElement('div');
       card.className = `skin-card${i === selectedIndex ? ' selected' : ''}`;
-      const color = `#${skin.headColor.toString(16).padStart(6, '0')}`;
-      card.innerHTML = `
-        <div class="sc-preview" style="background:${color};color:${color}"></div>
-        <div class="sc-name">${skin.name}</div>
-      `;
+
+      if (createHeadFn) {
+        /* ── Preview 3D: mini-canvas com a cabeça da skin a rodar ── */
+        const canvas = document.createElement('canvas');
+        canvas.width = 120;
+        canvas.height = 120;
+        canvas.className = 'sc-preview sc-preview-3d';
+        canvas.style.borderRadius = '50%';
+        canvas.style.margin = '0 auto 14px';
+        canvas.style.display = 'block';
+
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(120, 120);
+        renderer.setClearColor(0x000000, 0);
+        this._skinRenderers.push(renderer);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+        camera.position.set(0, 0.1, 1.6);
+        camera.lookAt(0, 0, 0);
+
+        // Iluminação para o preview
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(2, 3, 4);
+        scene.add(dirLight);
+        const backLight = new THREE.DirectionalLight(skin.headColor, 0.5);
+        backLight.position.set(-2, 1, -2);
+        scene.add(backLight);
+
+        // Criar mesh da cabeça
+        const headMesh = createHeadFn(skin);
+        scene.add(headMesh);
+
+        previewCanvases.push({ renderer, scene, camera, headMesh });
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'sc-name';
+        nameDiv.textContent = skin.name;
+
+        card.appendChild(canvas);
+        card.appendChild(nameDiv);
+      } else {
+        /* ── Fallback: círculo de cor ── */
+        const color = `#${skin.headColor.toString(16).padStart(6, '0')}`;
+        card.innerHTML = `
+          <div class="sc-preview" style="background:${color};color:${color}"></div>
+          <div class="sc-name">${skin.name}</div>
+        `;
+      }
+
       card.addEventListener('click', () => {
         this.skinGrid.querySelectorAll('.skin-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
@@ -224,6 +293,18 @@ export class UIManager {
       });
       this.skinGrid.appendChild(card);
     });
+
+    // Animar as cabeças (rotação lenta)
+    if (previewCanvases.length > 0) {
+      const animatePreviews = () => {
+        this._skinAnimId = requestAnimationFrame(animatePreviews);
+        for (const p of previewCanvases) {
+          p.headMesh.rotation.y += 0.015;
+          p.renderer.render(p.scene, p.camera);
+        }
+      };
+      animatePreviews();
+    }
   }
 
   /**
@@ -234,33 +315,6 @@ export class UIManager {
     if (el) {
       el.textContent = isActive ? 'ON' : 'OFF';
       el.classList.toggle('active', isActive);
-    }
-  }
-
-  /* ── Replay Controls ── */
-  showReplayBar(visible) {
-    if (this.replayBar) this.replayBar.classList.toggle('visible', visible);
-  }
-
-  setReplayTimeline(current, max) {
-    if (this.replayTimeline) {
-      this.replayTimeline.max = max;
-      this.replayTimeline.value = current;
-    }
-    if (this.replayFrame) {
-      this.replayFrame.textContent = `${current}/${max}`;
-    }
-  }
-
-  setReplayPlayButton(isPlaying) {
-    if (this.btnReplayPlay) {
-      this.btnReplayPlay.textContent = isPlaying ? '⏸' : '▶';
-    }
-  }
-
-  setReplaySpeedLabel(speed) {
-    if (this.btnReplaySpeed) {
-      this.btnReplaySpeed.textContent = `${speed}x`;
     }
   }
 
@@ -284,8 +338,8 @@ export class UIManager {
    */
   showPowerUp(type) {
     if (!this.hudPowerup) return;
-    const icons = { shield: '🛡️', speed: '⚡', portal: '🌀' };
-    const labels = { shield: 'SHIELD', speed: 'SPEED', portal: 'PORTAL' };
+    const icons = { shield: '🛡️', speed: '⚡' };
+    const labels = { shield: 'SHIELD', speed: 'SPEED' };
     if (this.powerupIcon) this.powerupIcon.textContent = icons[type] || '✨';
     if (this.powerupLabel) this.powerupLabel.textContent = labels[type] || type.toUpperCase();
     if (this.powerupBar) this.powerupBar.style.width = '100%';

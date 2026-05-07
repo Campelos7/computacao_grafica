@@ -1,49 +1,77 @@
 /* ==========================================================================
-   Food.js — Comida e Power-ups 3D
-   Requisito: Comida com animação de pulso/rotação.
-   Power-ups: Velocidade (estrela dourada), Escudo (esfera), Portal (anéis).
-   Cada power-up com material animado, partículas ao colectar, notificação UI.
+   Food.js — Sistema Dual de Comida e Power-ups 3D
+   ═══════════════════════════════════════════════════════════════════════════
+
+   OBJECTO COMPLEXO: Comida (TorusGeometry) + Shield (IcosahedronGeometry)
+
+   Sistema dual-slot:
+   ─ COMIDA: Sempre presente no mapa. Quando comida, reaparece imediatamente.
+   ─ SHIELD: Spawna raramente (~15% de chance ao comer comida).
+             Pode coexistir com a comida no mapa.
+
+   Requisitos cobertos:
+   - R1: Objectos 3D complexos (TorusGeometry, IcosahedronGeometry)
+   - Animação de pulso/rotação
+   - Partículas ao colectar
+   - Materiais PBR (MeshStandardMaterial com emissive)
    ========================================================================== */
 import * as THREE from 'three';
 import { HALF_BOARD, randomInt, randomFreePosition, PALETTE } from './utils/helpers.js';
+import { FOOD_COLORS, ITEM_TYPES } from './food/constants.js';
 
-/* ── Tipos de item ── */
-const ITEM_TYPES = {
-  FOOD:   'food',
-  SHIELD: 'shield',
-  PORTAL: 'portal',
-};
-
-/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   TIPOS DE ITEM — Identificadores para comida e power-ups
+   ══════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   CLASSE FOOD — Gestor de Comida e Power-ups
+   ══════════════════════════════════════════════════════════════════════════ */
 export class Food {
   /**
-   * @param {THREE.Scene} scene
+   * @param {THREE.Scene} scene — cena principal do Three.js
    */
   constructor(scene) {
     this.scene = scene;
+
+    /* ── Grupo principal que contém todos os itens ── */
     this.group = new THREE.Group();
     this.group.name = 'food-group';
     this.scene.add(this.group);
 
-    this.cell = new THREE.Vector3(0, 0, 0);
-    this.currentType = ITEM_TYPES.FOOD;
-    this.mesh = null;
+    /* ── Slot 1: COMIDA — sempre presente no mapa ── */
+    this.foodCell = new THREE.Vector3(0, 0, 0);  // posição na grelha
+    this.foodMesh = null;                         // mesh 3D da comida
 
-    // Power-up state
-    this.activePowerups = []; // tipos disponíveis no nível actual
+    /* ── Slot 2: SHIELD — opcional, spawna raramente ── */
+    this.shieldCell = new THREE.Vector3(0, 0, 0); // posição na grelha
+    this.shieldMesh = null;                        // mesh 3D do shield
+    this.shieldPresent = false;                    // se o shield está no mapa
 
-    // Partículas
+    /* ── Power-ups disponíveis no nível actual ── */
+    this.activePowerups = [];
+
+    /* ── Partículas de colecta ── */
     this.particles = [];
 
+    /* ── Criar comida inicial ── */
     this._createFoodMesh();
   }
 
-  /* ── Criação dos diferentes tipos ── */
+  /* ══════════════════════════════════════════════════════════════════════════
+     CRIAÇÃO DOS MESHES — Objectos 3D complexos
+     ══════════════════════════════════════════════════════════════════════════ */
 
+  /**
+   * Cria o mesh da comida (TorusGeometry — donut neon).
+   * Primitiva: TorusGeometry com MeshStandardMaterial emissivo.
+   */
   _createFoodMesh() {
-    this._clearMesh();
+    this._clearFoodMesh();
 
-    // Requisito: TorusGeometry para a comida, animação pulso/rotação
+    /* GUIA DE EDIÇÃO (COMIDA):
+       - Tamanho geral do donut: 1.º parâmetro (raio = 0.3)
+       - Espessura do donut: 2.º parâmetro (tubo = 0.14)
+       - Definição visual: 3.º e 4.º parâmetros (16, 28)
+       - Altura no mapa: this.foodMesh.position.y = 0.55 */
     const geo = new THREE.TorusGeometry(0.3, 0.14, 16, 28);
     const mat = new THREE.MeshStandardMaterial({
       color: 0xff00ff,
@@ -52,21 +80,26 @@ export class Food {
       roughness: 0.15,
       metalness: 0.5,
     });
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.position.y = 0.55;
-    this.mesh.rotation.x = Math.PI / 2;
-    this.mesh.castShadow = true;
-    this.mesh.name = 'food';
-    this.currentType = ITEM_TYPES.FOOD;
-    this.group.add(this.mesh);
+    this.foodMesh = new THREE.Mesh(geo, mat);
+    this.foodMesh.position.y = 0.55;
+    this.foodMesh.rotation.x = Math.PI / 2;
+    this.foodMesh.castShadow = true;
+    this.foodMesh.name = 'food';
+    this.group.add(this.foodMesh);
   }
 
+  /**
+   * Cria o mesh do shield (IcosahedronGeometry — orbe semi-transparente).
+   * Primitiva: IcosahedronGeometry com material translúcido.
+   */
+  _createShieldMesh() {
+    this._clearShieldMesh();
 
-
-  _createShieldOrb() {
-    this._clearMesh();
-
-    // Requisito: Esfera para power-up de escudo
+    /* GUIA DE EDIÇÃO (SHIELD):
+       - Tamanho do orb: 1.º parâmetro (0.32)
+       - Nível de detalhe: 2.º parâmetro (2)
+       - Transparência: opacity
+       - Altura no mapa: this.shieldMesh.position.y = 0.55 */
     const geo = new THREE.IcosahedronGeometry(0.32, 2);
     const mat = new THREE.MeshStandardMaterial({
       color: 0x00ffff,
@@ -77,143 +110,175 @@ export class Food {
       transparent: true,
       opacity: 0.85,
     });
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.position.y = 0.55;
-    this.mesh.castShadow = true;
-    this.mesh.name = 'shield-orb';
-    this.currentType = ITEM_TYPES.SHIELD;
-    this.group.add(this.mesh);
+    this.shieldMesh = new THREE.Mesh(geo, mat);
+    this.shieldMesh.position.y = 0.55;
+    this.shieldMesh.castShadow = true;
+    this.shieldMesh.name = 'shield-orb';
+    this.group.add(this.shieldMesh);
   }
 
-  _createPortal() {
-    this._clearMesh();
-
-    // Requisito: Dois anéis animados com shader de distorção
-    const ringGeo = new THREE.TorusGeometry(0.35, 0.06, 12, 32);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0xaa00ff,
-      emissive: 0x8800ff,
-      emissiveIntensity: 1.2,
-      roughness: 0.1,
-      metalness: 0.4,
-      transparent: true,
-      opacity: 0.9,
-    });
-
-    const ring1 = new THREE.Mesh(ringGeo, ringMat);
-    const ring2 = new THREE.Mesh(ringGeo, ringMat.clone());
-    ring1.rotation.x = Math.PI / 2;
-    ring2.rotation.z = Math.PI / 2;
-
-    this.mesh = new THREE.Group();
-    this.mesh.add(ring1, ring2);
-    this.mesh.position.y = 0.55;
-    this.mesh.name = 'portal';
-    this.currentType = ITEM_TYPES.PORTAL;
-    this.group.add(this.mesh);
-  }
-
-  _clearMesh() {
-    if (this.mesh) {
-      this.group.remove(this.mesh);
-      if (this.mesh.geometry) this.mesh.geometry.dispose();
-      if (this.mesh.material) {
-        if (this.mesh.material.dispose) this.mesh.material.dispose();
-      }
-      // Se é um Group (portal), limpar filhos
-      if (this.mesh.children) {
-        this.mesh.children.forEach(c => {
-          if (c.geometry) c.geometry.dispose();
-          if (c.material) c.material.dispose();
-        });
-      }
-      this.mesh = null;
+  /**
+   * Remove e descarta o mesh da comida.
+   */
+  _clearFoodMesh() {
+    if (this.foodMesh) {
+      this.group.remove(this.foodMesh);
+      if (this.foodMesh.geometry) this.foodMesh.geometry.dispose();
+      if (this.foodMesh.material) this.foodMesh.material.dispose();
+      this.foodMesh = null;
     }
   }
 
-  /* ── Spawn ── */
+  /**
+   * Remove e descarta o mesh do shield.
+   */
+  _clearShieldMesh() {
+    if (this.shieldMesh) {
+      this.group.remove(this.shieldMesh);
+      if (this.shieldMesh.geometry) this.shieldMesh.geometry.dispose();
+      if (this.shieldMesh.material) this.shieldMesh.material.dispose();
+      this.shieldMesh = null;
+    }
+    this.shieldPresent = false;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     SPAWN — Posicionamento de itens no mapa
+     ══════════════════════════════════════════════════════════════════════════ */
 
   /**
-   * Gera comida/power-up numa posição livre.
+   * Reposiciona a COMIDA numa posição livre do tabuleiro.
+   * A comida está SEMPRE presente — é chamado ao início e quando comida.
    * @param {Array<THREE.Vector3>} occupiedSegments — segmentos da cobra
    * @param {Array<{x:number,z:number}>} [obstaclePositions] — posições de obstáculos
    */
-  respawn(occupiedSegments, obstaclePositions = []) {
+  respawnFood(occupiedSegments, obstaclePositions = []) {
     const occupied = new Set(occupiedSegments.map(s => `${s.x},${s.z}`));
     obstaclePositions.forEach(p => occupied.add(`${p.x},${p.z}`));
+    /* Evitar spawn na mesma posição do shield */
+    if (this.shieldPresent) {
+      occupied.add(`${this.shieldCell.x},${this.shieldCell.z}`);
+    }
 
     const pos = randomFreePosition(occupied);
-    this.cell.copy(pos);
+    this.foodCell.copy(pos);
 
-    // Decidir tipo: 75% food, 25% power-up (se disponíveis)
-    const roll = Math.random();
-    if (roll < 0.75 || this.activePowerups.length === 0) {
-      this._createFoodMesh();
-    } else {
-      const pType = this.activePowerups[Math.floor(Math.random() * this.activePowerups.length)];
-      switch (pType) {
-        case 'shield': this._createShieldOrb(); break;
-        case 'portal': this._createPortal(); break;
-        default:       this._createFoodMesh();
-      }
-    }
+    /* Garantir que o mesh da comida existe */
+    if (!this.foodMesh) this._createFoodMesh();
 
-    if (this.mesh) {
-      if (this.mesh.position) {
-        this.mesh.position.x = this.cell.x;
-        this.mesh.position.z = this.cell.z;
-      }
-    }
+    this.foodMesh.position.x = this.foodCell.x;
+    this.foodMesh.position.z = this.foodCell.z;
+  }
+
+  /**
+   * Compatibilidade — redireciona para respawnFood.
+   * (mantém API antiga para não quebrar chamadas existentes)
+   */
+  respawn(occupiedSegments, obstaclePositions = []) {
+    this.respawnFood(occupiedSegments, obstaclePositions);
+  }
+
+  /**
+   * Tenta spawnar um SHIELD no mapa (chamado quando comida é comida).
+   * Chance de ~15%. Se já houver um shield no mapa, não faz nada.
+   * @param {Array<THREE.Vector3>} occupiedSegments — segmentos da cobra
+   * @param {Array<{x:number,z:number}>} [obstaclePositions] — posições de obstáculos
+   */
+  trySpawnShield(occupiedSegments, obstaclePositions = []) {
+    /* Se já há shield no mapa ou shield não está nos power-ups, sair */
+    if (this.shieldPresent) return;
+    if (!this.activePowerups.includes('shield')) return;
+
+    /* Chance de spawn do shield:
+       - 0.15 = 15%
+       - para 25% usa 0.25, para 10% usa 0.10 */
+    if (Math.random() > 0.15) return;
+
+    const occupied = new Set(occupiedSegments.map(s => `${s.x},${s.z}`));
+    obstaclePositions.forEach(p => occupied.add(`${p.x},${p.z}`));
+    /* Evitar spawn na posição da comida */
+    occupied.add(`${this.foodCell.x},${this.foodCell.z}`);
+
+    const pos = randomFreePosition(occupied);
+    this.shieldCell.copy(pos);
+
+    this._createShieldMesh();
+    this.shieldMesh.position.x = this.shieldCell.x;
+    this.shieldMesh.position.z = this.shieldCell.z;
+    this.shieldPresent = true;
+  }
+
+  /**
+   * Remove o shield do mapa (chamado quando a cobra apanha o shield).
+   */
+  removeShield() {
+    this._clearShieldMesh();
   }
 
   /**
    * Define os power-ups disponíveis para o nível actual.
-   * @param {string[]} types — ex: ['speed', 'shield']
+   * @param {string[]} types — ex: ['shield']
    */
   setAvailablePowerups(types) {
     this.activePowerups = types || [];
   }
 
-  /* ── Animação ── */
+  /* ══════════════════════════════════════════════════════════════════════════
+     DETECÇÃO DE COLISÃO — Verifica se a cobra comeu algo
+     ══════════════════════════════════════════════════════════════════════════ */
 
   /**
-   * Requisito: Animação de pulso/rotação da comida.
-   * @param {number} elapsed — tempo total decorrido
+   * Verifica se uma posição coincide com a comida.
+   * @param {THREE.Vector3} pos — posição a verificar
+   * @returns {boolean}
+   */
+  checkFoodCollision(pos) {
+    return pos.x === this.foodCell.x && pos.z === this.foodCell.z;
+  }
+
+  /**
+   * Verifica se uma posição coincide com o shield.
+   * @param {THREE.Vector3} pos — posição a verificar
+   * @returns {boolean}
+   */
+  checkShieldCollision(pos) {
+    if (!this.shieldPresent) return false;
+    return pos.x === this.shieldCell.x && pos.z === this.shieldCell.z;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ANIMAÇÃO — Actualização por frame
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Anima comida e shield (rotação, pulso, flutuação).
+   * Chamado a cada frame no game loop.
+   * @param {number} elapsed — tempo total decorrido (s)
    */
   update(elapsed) {
-    if (!this.mesh) return;
+    /* ── Animação da comida: rotação + pulso ── */
+    if (this.foodMesh) {
+      this.foodMesh.rotation.y += 0.04;
+      this.foodMesh.rotation.x = Math.PI / 2 + Math.sin(elapsed * 2.8) * 0.18;
+      this.foodMesh.scale.setScalar(1 + Math.sin(elapsed * 5.5) * 0.15);
+    }
 
-    switch (this.currentType) {
-      case ITEM_TYPES.FOOD:
-        // Rotação + pulso
-        this.mesh.rotation.y += 0.04;
-        this.mesh.rotation.x = Math.PI / 2 + Math.sin(elapsed * 2.8) * 0.18;
-        this.mesh.scale.setScalar(1 + Math.sin(elapsed * 5.5) * 0.15);
-        break;
-
-
-      case ITEM_TYPES.SHIELD:
-        // Orbe: rotação lenta + flutuação
-        this.mesh.rotation.y += 0.025;
-        this.mesh.rotation.x += 0.015;
-        this.mesh.position.y = 0.55 + Math.sin(elapsed * 2) * 0.15;
-        this.mesh.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
-        break;
-
-      case ITEM_TYPES.PORTAL:
-        // Anéis: rotação em eixos diferentes
-        if (this.mesh.children[0]) this.mesh.children[0].rotation.z += 0.05;
-        if (this.mesh.children[1]) this.mesh.children[1].rotation.x += 0.04;
-        this.mesh.position.y = 0.55 + Math.sin(elapsed * 1.5) * 0.1;
-        this.mesh.scale.setScalar(1 + Math.sin(elapsed * 4) * 0.12);
-        break;
+    /* ── Animação do shield: rotação lenta + flutuação ── */
+    if (this.shieldMesh && this.shieldPresent) {
+      this.shieldMesh.rotation.y += 0.025;
+      this.shieldMesh.rotation.x += 0.015;
+      this.shieldMesh.position.y = 0.55 + Math.sin(elapsed * 2) * 0.15;
+      this.shieldMesh.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
     }
   }
 
-  /* ── Partículas de colecta ── */
+  /* ══════════════════════════════════════════════════════════════════════════
+     PARTÍCULAS DE COLECTA — Efeito visual ao apanhar item
+     ══════════════════════════════════════════════════════════════════════════ */
 
   /**
    * Emite partículas quando um item é colectado.
+   * Cada partícula é uma SphereGeometry com MeshBasicMaterial.
    * @param {THREE.Vector3} position — posição da colecta
    * @param {number} color — cor das partículas (hex)
    */
@@ -231,7 +296,7 @@ export class Food {
       p.position.copy(position);
       p.position.y = 0.55;
 
-      // Velocidade aleatória
+      /* Velocidade aleatória para cada partícula */
       p.userData.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 4,
         Math.random() * 3 + 1,
@@ -246,14 +311,13 @@ export class Food {
   }
 
   /**
-   * Actualiza partículas (gravidade, fade, remoção).
+   * Actualiza partículas (gravidade, fade out, remoção).
    * @param {number} delta — tempo desde último frame (s)
    */
   updateParticles(delta) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.userData.life -= delta * p.userData.decay;
-      // Evitar alocação por frame (clone)
       p.position.addScaledVector(p.userData.velocity, delta);
       p.userData.velocity.y -= 9.8 * delta; // gravidade
       p.material.opacity = Math.max(0, p.userData.life);
@@ -268,22 +332,40 @@ export class Food {
     }
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     UTILIDADES
+     ══════════════════════════════════════════════════════════════════════════ */
+
   /**
-   * Devolve a cor de partículas para o tipo actual.
+   * Devolve a célula da comida (para compatibilidade com o código antigo).
+   * @returns {THREE.Vector3}
    */
-  getCollectColor() {
-    switch (this.currentType) {
-      case ITEM_TYPES.SHIELD: return 0x00ffff;
-      case ITEM_TYPES.PORTAL: return 0xaa00ff;
-      default:                return 0xff00ff;
-    }
+  get cell() {
+    return this.foodCell;
   }
 
   /**
-   * Devolve o tipo de item actual.
+   * Devolve o tipo de item actual (sempre FOOD agora, shield é separado).
+   * @returns {string}
    */
   get type() {
-    return this.currentType;
+    return ITEM_TYPES.FOOD;
+  }
+
+  /**
+   * Devolve cor de partículas para comida.
+   * @returns {number}
+   */
+  getCollectColor() {
+    return FOOD_COLORS.COLLECT;
+  }
+
+  /**
+   * Devolve cor de partículas para shield.
+   * @returns {number}
+   */
+  getShieldCollectColor() {
+    return FOOD_COLORS.SHIELD_COLLECT;
   }
 }
 

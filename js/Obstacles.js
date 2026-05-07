@@ -7,6 +7,7 @@
    ========================================================================== */
 import * as THREE from 'three';
 import { createCanvasTexture } from './utils/helpers.js';
+import { BIOME_OBSTACLE_COLORS } from './obstacles/biomeConfig.js';
 
 /* ── Texturas por bioma ── */
 
@@ -45,24 +46,6 @@ function createObstacleTexture(biome) {
 }
 
 /* ── Cores por bioma para obstáculos ── */
-const BIOME_OBSTACLE_COLORS = {
-  forest: {
-    wallColor: 0x226633, wallEmissive: 0x115522, wallEmissiveIntensity: 0.4,
-    wallEdge: 0x22cc44,
-    blockColor: 0x44aa44, blockEmissive: 0x115522, blockEmissiveIntensity: 0.5,
-  },
-  desert: {
-    wallColor: 0x8b6b3e, wallEmissive: 0x553311, wallEmissiveIntensity: 0.35,
-    wallEdge: 0xcc6611,
-    blockColor: 0xcc8833, blockEmissive: 0x664411, blockEmissiveIntensity: 0.45,
-  },
-  snow: {
-    wallColor: 0x6688aa, wallEmissive: 0x224466, wallEmissiveIntensity: 0.45,
-    wallEdge: 0x4488cc,
-    blockColor: 0x88bbdd, blockEmissive: 0x336699, blockEmissiveIntensity: 0.5,
-  },
-};
-
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export class Obstacles {
   /**
@@ -105,6 +88,10 @@ export class Obstacles {
   _addMovingWall(cfg) {
     const colors = BIOME_OBSTACLE_COLORS[this.currentBiome] || BIOME_OBSTACLE_COLORS.forest;
 
+    // GUIA DE EDIÇÃO (MOVING WALL):
+    // - largura = 1.º parâmetro (1.8)
+    // - altura = 2.º parâmetro (1.2)
+    // - espessura = 3.º parâmetro (0.6)
     const geo = new THREE.BoxGeometry(1.8, 1.2, 0.6);
     const mat = new THREE.MeshStandardMaterial({
       map: this.obstacleTexture,
@@ -138,6 +125,9 @@ export class Obstacles {
     this.obstacles.push({
       mesh,
       type: 'movingWall',
+      // axis/range/speed também podem vir do JSON do nível.
+      // - range: distância máxima de oscilação
+      // - speed: velocidade de oscilação
       axis: cfg.axis || 'x',
       range: cfg.range || 4,
       speed: cfg.speed || 1.5,
@@ -149,6 +139,8 @@ export class Obstacles {
   _addDisappearingBlock(cfg) {
     const colors = BIOME_OBSTACLE_COLORS[this.currentBiome] || BIOME_OBSTACLE_COLORS.forest;
 
+    // GUIA DE EDIÇÃO (DISAPPEARING BLOCK):
+    // - tamanho do bloco: parâmetros do BoxGeometry (0.9, 0.9, 0.9)
     const geo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
     const mat = new THREE.MeshStandardMaterial({
       map: this.obstacleTexture,
@@ -171,6 +163,7 @@ export class Obstacles {
     this.obstacles.push({
       mesh,
       type: 'disappearingBlock',
+      // interval controla o tempo de aparecer/desaparecer.
       interval: cfg.interval || 5,
       basePos: new THREE.Vector3(cfg.position[0], 0.45, cfg.position[1]),
       _visible: true,
@@ -183,6 +176,9 @@ export class Obstacles {
   update(elapsed, delta) {
     for (const obs of this.obstacles) {
       if (obs.type === 'movingWall') {
+        // Movimento senoidal:
+        // - obs.speed acelera/desacelera a oscilação
+        // - obs.range aumenta/reduz amplitude
         const offset = Math.sin(elapsed * obs.speed) * obs.range;
         if (obs.axis === 'x') {
           obs.mesh.position.x = obs.basePos.x + offset;

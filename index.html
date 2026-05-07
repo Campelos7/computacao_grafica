@@ -46,7 +46,6 @@
         <div><kbd>SPACE</kbd> Pausar</div>
         <div><kbd>C</kbd> Câmara</div>
         <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> Luzes</div>
-        <div><kbd>R</kbd> Replay</div>
         <div><kbd>M</kbd> Post-FX</div>
         <div><kbd>P</kbd> Som</div>
         <div>🖱️ OrbitControls</div>
@@ -104,25 +103,8 @@
     <div id="go-highscore" style="font-family:'Press Start 2P',monospace;font-size:10px;color:#39ff14;margin-top:8px;">
     </div>
     <div class="go-actions">
-      Press <kbd>R</kbd> to watch REPLAY<br>
       Press <kbd>SPACE</kbd> to return to MENU
     </div>
-  </div>
-
-  <!-- REPLAY CONTROLS -->
-  <div id="replay-bar">
-    <span class="replay-label">📼 REPLAY</span>
-    <button id="btn-replay-rew" title="Rewind">⏪</button>
-    <button id="btn-replay-play" title="Play/Pause">⏸</button>
-    <button id="btn-replay-speed" title="Speed">1x</button>
-    <input type="range" id="replay-timeline" min="0" max="100" value="0" />
-    <span id="replay-frame">0/0</span>
-  </div>
-
-  <!-- LEVEL TRANSITION -->
-  <div id="level-transition">
-    <div class="lt-name" id="lt-name">LEVEL</div>
-    <div class="lt-sub" id="lt-sub">Loading...</div>
   </div>
 
   <!-- NOTIFICATION CONTAINER -->
@@ -156,8 +138,13 @@
          SUB-MENU: LEVEL SELECT
          ================================================================ -->
   <div id="panel-levels" class="menu-panel">
-    <div class="menu-panel-title">SELECT LEVEL</div>
+    <div class="menu-panel-title">SETUP DE JOGO</div>
+    <div class="menu-section-title">ESCOLHER MAPA</div>
     <div class="level-grid" id="level-grid">
+      <!-- Populated dynamically by main.js -->
+    </div>
+    <div class="menu-section-title">ESCOLHER DIFICULDADE</div>
+    <div class="difficulty-grid" id="difficulty-grid">
       <!-- Populated dynamically by main.js -->
     </div>
     <button class="menu-panel-back" id="btn-back-levels">← BACK</button>
@@ -198,6 +185,26 @@
   </div>
 
   <!-- MAIN SCRIPT -->
+  <script>
+    // Failsafe: se o boot JS falhar cedo, não ficar preso no loading.
+    setTimeout(() => {
+      if (window.__snakeBootDone) return;
+      const loading = document.getElementById('loading-screen');
+      const loadingText = document.getElementById('loading-text');
+      if (loadingText) {
+        loadingText.textContent = 'Falha no arranque. A mostrar menu...';
+      }
+      if (loading) {
+        loading.style.display = 'none';
+      }
+      const menuOverlay = document.getElementById('menu-overlay');
+      if (menuOverlay) {
+        menuOverlay.classList.add('visible');
+        menuOverlay.classList.remove('hidden');
+      }
+      document.body.classList.add('menu-active');
+    }, 9000);
+  </script>
   <script type="module" src="./js/main.js"></script>
 
 </body>

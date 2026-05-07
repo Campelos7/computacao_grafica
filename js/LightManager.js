@@ -21,6 +21,9 @@ export class LightManager {
     this.ui = uiManager;
 
     // ---- 1. DirectionalLight (tecla 1) — Sol/Lua, sombras ----
+    // GUIA DE EDIÇÃO:
+    // - intensidade da luz principal: 2.º parâmetro (2.0)
+    // - posição da luz: .position.set(...)
     this.directional = new THREE.DirectionalLight(0xff88ff, 2.0);
     this.directional.name = 'directional';
     this.directional.position.set(15, 22, 10);
@@ -37,6 +40,10 @@ export class LightManager {
     this.directional.shadow.radius = 2;
 
     // ---- 2. SpotLight (tecla 2) — Holofote que segue a cobra ----
+    // GUIA DE EDIÇÃO:
+    // - intensidade: 2.º parâmetro (5.0)
+    // - alcance: 3.º parâmetro (30)
+    // - abertura do cone: 4.º parâmetro (Math.PI / 6)
     this.spot = new THREE.SpotLight(0xffffff, 5.0, 30, Math.PI / 6, 0.4, 1.0);
     this.spot.name = 'spotlight';
     this.spot.position.set(0, 12, 0);
@@ -51,12 +58,17 @@ export class LightManager {
     this.spot.target = this._spotTarget;
 
     // ---- 3. PointLight (tecla 3) — Aura forte na comida ----
+    // GUIA DE EDIÇÃO:
+    // - intensidade base: 2.º parâmetro (4.0)
+    // - alcance: 3.º parâmetro (12)
     this.point = new THREE.PointLight(0xff6600, 4.0, 12, 1.5);
     this.point.name = 'point';
     this.point.position.set(0, 1.8, 0);
     this.point.castShadow = false;
 
     // ---- 4. AmbientLight (tecla 4) — Iluminação base mínima ----
+    // GUIA DE EDIÇÃO:
+    // - brilho global mínimo: 2.º parâmetro (0.3)
     this.ambient = new THREE.AmbientLight(0x4422aa, 0.3);
     this.ambient.name = 'ambient';
 

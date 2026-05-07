@@ -26,11 +26,17 @@ const CRTShader = {
     tDiffuse:          { value: null },
     uTime:             { value: 0 },
     uResolution:       { value: new THREE.Vector2(800, 600) },
-    uCurvature:        { value: 6.0 },    // curvatura muito subtil
-    uScanlineIntensity:{ value: 0.06 },   // scanlines quase invisíveis
-    uScanlineCount:    { value: 500.0 },   // mais finas
-    uChromaOffset:     { value: 0.001 },  // aberração cromática mínima
-    uVignette:         { value: 0.25 },    // vinheta ligeira
+    // GUIA DE EDIÇÃO (CRT):
+    // - uCurvature: curvatura do ecrã
+    // - uScanlineIntensity: força das scanlines
+    // - uScanlineCount: quantidade/frequência de scanlines
+    // - uChromaOffset: separação RGB (aberração cromática)
+    // - uVignette: escurecimento das bordas
+    uCurvature:        { value: 6.0 },
+    uScanlineIntensity:{ value: 0.06 },
+    uScanlineCount:    { value: 500.0 },
+    uChromaOffset:     { value: 0.001 },
+    uVignette:         { value: 0.25 },
   },
 
   // Vertex shader — passthrough com UVs
@@ -114,7 +120,10 @@ const PixelateShader = {
   uniforms: {
     tDiffuse:    { value: null },
     uResolution: { value: new THREE.Vector2(800, 600) },
-    uPixelSize:  { value: new THREE.Vector2(1920, 1080) },  // resolução alta (efeito subtil)
+    // GUIA DE EDIÇÃO (PIXELATE):
+    // - valores menores => imagem mais pixelizada
+    // - valores maiores => efeito mais subtil
+    uPixelSize:  { value: new THREE.Vector2(1920, 1080) },
   },
 
   vertexShader: /* glsl */`
@@ -149,7 +158,9 @@ const FilmGrainShader = {
   uniforms: {
     tDiffuse:       { value: null },
     uTime:          { value: 0 },
-    uGrainIntensity:{ value: 0.03 },  // grain muito subtil
+    // GUIA DE EDIÇÃO (GRAIN):
+    // - uGrainIntensity: intensidade do ruído
+    uGrainIntensity:{ value: 0.03 },
     uFlickerSpeed:  { value: 12.0 },
   },
 
@@ -208,6 +219,10 @@ export class PostProcessing {
     this.composer.addPass(this.renderPass);
 
     // 2. UnrealBloomPass — neon glow bloom
+    // GUIA DE EDIÇÃO:
+    // - strength: força do bloom
+    // - radius: espalhamento do bloom
+    // - threshold: quão "brilhante" precisa ser para aplicar bloom
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.x, size.y),
       0.5,   // strength — subtil glow
