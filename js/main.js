@@ -1,24 +1,27 @@
 /* ==========================================================================
    main.js — Orquestrador principal do jogo Snake Retro 3D
+   Parâmetros de render/sombra/cobra: `js/gameConfig.js` → `RENDER`.
    
    Requisitos cobertos:
    - R1: Objetos 3D complexos   - R2: Toggle câmara (C)
-   - R3: 4 luzes (1-4)          - R4: Teclado + Rato + Raycaster
+   - R3: 4 luzes (1-4)          - R4: Teclado + rato (Orbit na pausa) + UI HTML
   - R5: Animação  - Post-processing (M)
    - Níveis JSON   - Power-ups   - Skins   - High Score
    ========================================================================== */
 import * as THREE from 'three';
 
-import { DIRS, BOARD_SIZE } from './utils/helpers.js';
+import { DIRS, BOARD_SIZE, gridCellCenterWorldX, gridCellCenterWorldZ } from './utils/helpers.js';
 import { UIManager } from './UIManager.js';
 import { LightManager } from './LightManager.js';
 import { CameraController } from './CameraController.js';
 import { PostProcessing } from './PostProcessing.js';
 import { LevelManager } from './LevelManager.js';
+import { loadDecorModels } from './ModelLoader.js';
 import { Obstacles } from './Obstacles.js';
 import { Snake, SNAKE_SKINS, createSkinHeadPreview } from './snake/index.js';
 import { Food } from './food.js';
 import { SoundManager } from './SoundManager.js';
+import { RENDER, getRendererShadowMapType, SHIELD } from './gameConfig.js';
 
 window.__snakeBootStarted = true;
 
@@ -45,15 +48,19 @@ const MENU_PAGES = {
    ══════════════════════════════════════════════════════════════════════════ */
 const app = document.getElementById('app');
 
-// ---- Renderer ----
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+/** @see {@link ./gameConfig.js} — `RENDER` */
+const MAX_PIXEL_RATIO = RENDER.maxPixelRatio;
+const RENDER_SCALE = RENDER.internalScale;
+const MAX_SNAKE_STEPS_PER_FRAME = RENDER.maxSnakeStepsPerFrame;
+
+// ---- Renderer (sem MSAA: o EffectComposer já re-renderiza tudo; MSAA duplicava custo GPU)
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.sortObjects = RENDER.sortObjects;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = getRendererShadowMapType(THREE);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = RENDER.toneMappingExposureDefault;
 renderer.domElement.tabIndex = 1;
 app.appendChild(renderer.domElement);
 
@@ -73,18 +80,37 @@ const food = new Food(scene);
 const sound = new SoundManager();
 const postProc = new PostProcessing(renderer, scene, camCtrl.camera);
 
+function syncRendererSize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const rw = Math.max(320, Math.floor(w * RENDER_SCALE));
+  const rh = Math.max(240, Math.floor(h * RENDER_SCALE));
+  camCtrl.resize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+  renderer.setSize(rw, rh, false);
+  renderer.domElement.style.width = `${w}px`;
+  renderer.domElement.style.height = `${h}px`;
+  postProc.resize(rw, rh);
+}
+
+syncRendererSize();
+
 ui.setLoadingProgress(5, 'Initializing...');
 
 // ---- Game State ----
 let state = STATES.LOADING;
 let menuPage = MENU_PAGES.MAIN;
+/** `true` quando o painel DEFINIÇÕES foi aberto a partir da pausa (voltar reabre a pausa, não o menu). */
+let settingsOpenedFromPause = false;
 let score = 0;
 let stepDuration = 0.15;
 let accumulator = 0;
 let gameTimer = 0;
+let lastHudTimerTick = -1;
+/** Segundos restantes em que colisão com *movingWall* não mata (definido pela dificuldade). */
+let movingWallGraceRemaining = 0;
 
 // ---- Death Effect State ----
-let deathParticles = [];
 let deathShakeTimer = 0;
 let deathSlowMotion = false;
 let deathSlowTimer = 0;
@@ -101,7 +127,7 @@ function applyLevelVisualTheme(level) {
   if (theme.exposure != null) {
     renderer.toneMappingExposure = theme.exposure;
   } else {
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = RENDER.toneMappingExposureDefault;
   }
 
   // Bloom por nível (PostProcessing)
@@ -110,19 +136,10 @@ function applyLevelVisualTheme(level) {
   }
 }
 
-// ---- Combo System ----
-// Combo activa-se apenas quando se come 2 comidas num intervalo curto
-let comboCount = 0;
-let comboTimer = 0;
-let lastEatTime = -999;            // timestamp da última comida
-const COMBO_WINDOW = 2.0;          // segundos — janela para comer outra comida e activar combo
-const COMBO_DECAY  = 3.0;          // segundos — tempo até o combo expirar depois de activado
-const COMBO_MULTIPLIERS = [1, 1, 1.5, 2, 2.5, 3]; // combo 0,1,2,3,4,5+
-
-// ---- Selections ----
 let selectedMapIndex = 0;
 let selectedDifficulty = 'easy';
 let selectedSkinIndex = 0;
+sound.applyDifficultyPreset(selectedDifficulty);
 
 // ---- High Score (localStorage) ----
 let highScore = parseInt(localStorage.getItem('snake3d_highscore') || '0', 10);
@@ -153,12 +170,6 @@ hudSound?.addEventListener('click', () => {
   }
 });
 
-// ---- Ambient Particles ----
-const particleGroup = new THREE.Group();
-particleGroup.name = 'ambient-particles';
-scene.add(particleGroup);
-const ambientParticles = [];
-
 // ---- Preview Snake (menu background) ----
 const previewGroup = new THREE.Group();
 previewGroup.name = 'preview-snake';
@@ -175,18 +186,18 @@ async function init() {
     await levelMgr.loadConfig('levels/levelConfig.json');
 
     ui.setLoadingProgress(40, 'Loading 3D models...');
-    await levelMgr.loadModels((p) => {
+    const decorModels = await loadDecorModels((p) => {
       ui.setLoadingProgress(40 + p * 30, 'Loading 3D models...');
     });
+    levelMgr.setDecorModels(decorModels);
 
     ui.setLoadingProgress(75, 'Building level...');
     const initialLevel = await levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true);
-    food.setAvailablePowerups(levelMgr.powerups);
+    food.setAvailablePowerups(levelMgr.powerups, levelMgr.shieldEveryApples);
     stepDuration = levelMgr.speed;
     applyLevelVisualTheme(initialLevel);
 
     ui.setLoadingProgress(85, 'Creating menu...');
-    createAmbientParticles(80);
     createPreviewSnake();
 
     ui.setLoadingProgress(100, 'Ready!');
@@ -195,6 +206,7 @@ async function init() {
     window.__snakeBootDone = true;
 
     enterMenu();
+    ensureAudioResumeOnFirstGesture();
     if (!animationStarted) {
       animationStarted = true;
       animate();
@@ -206,51 +218,12 @@ async function init() {
     ui.hideLoading();
     window.__snakeBootDone = true;
     enterMenu();
+    ensureAudioResumeOnFirstGesture();
     if (!animationStarted) {
       animationStarted = true;
       animate();
     }
     ui.showNotification('Alguns recursos falharam, mas o jogo iniciou.', 'default', 3200);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   AMBIENT PARTICLES — Flocos brilhantes no fundo
-   ══════════════════════════════════════════════════════════════════════════ */
-function createAmbientParticles(count) {
-  const geo = new THREE.SphereGeometry(0.04, 4, 3);
-  const colors = [0xff00ff, 0x00ffff, 0xffff00, 0x39ff14];
-  const spread = 25;
-
-  for (let i = 0; i < count; i++) {
-    const mat = new THREE.MeshBasicMaterial({
-      color: colors[i % colors.length],
-      transparent: true,
-      opacity: 0.3 + Math.random() * 0.4,
-    });
-    const p = new THREE.Mesh(geo, mat);
-    p.position.set(
-      (Math.random() - 0.5) * spread * 2,
-      Math.random() * 12 + 0.5,
-      (Math.random() - 0.5) * spread * 2
-    );
-    p.userData.baseY = p.position.y;
-    p.userData.speed = 0.3 + Math.random() * 0.8;
-    p.userData.phase = Math.random() * Math.PI * 2;
-    p.userData.drift = (Math.random() - 0.5) * 0.3;
-    particleGroup.add(p);
-    ambientParticles.push(p);
-  }
-}
-
-function updateAmbientParticles(elapsed) {
-  for (const p of ambientParticles) {
-    p.position.y = p.userData.baseY + Math.sin(elapsed * p.userData.speed + p.userData.phase) * 1.5;
-    p.position.x += p.userData.drift * 0.01;
-    p.material.opacity = 0.2 + Math.sin(elapsed * 2 + p.userData.phase) * 0.15;
-    // Wrap around
-    if (p.position.x > 25) p.position.x = -25;
-    if (p.position.x < -25) p.position.x = 25;
   }
 }
 
@@ -272,7 +245,7 @@ function createPreviewSnake() {
 
   for (let i = 0; i < segCount; i++) {
     const mesh = new THREE.Mesh(i === 0 ? headGeo : bodyGeo, i === 0 ? headMat : bodyMat);
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     previewGroup.add(mesh);
     previewSegments.push(mesh);
   }
@@ -326,18 +299,22 @@ function openSubMenu(page) {
   ui.showPanel('panel-main', false);
 
   if (page === MENU_PAGES.LEVELS) {
+    levelMgr.setGameplayLayersVisible(true);
+    obstacles.group.visible = true;
     ui.populateLevelGrid(levelMgr.levels, selectedMapIndex, (i) => {
       selectedMapIndex = i;
       levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true).then(() => { // preview em menu
-        food.setAvailablePowerups(levelMgr.powerups);
+        food.setAvailablePowerups(levelMgr.powerups, levelMgr.shieldEveryApples);
         stepDuration = levelMgr.speed;
         applyLevelVisualTheme(levelMgr.currentLevel);
+        sound.applyDifficultyPreset(selectedDifficulty);
       });
     });
     ui.populateDifficultyGrid(levelMgr.difficulties, selectedDifficulty, (difficultyId) => {
       selectedDifficulty = difficultyId;
+      sound.applyDifficultyPreset(selectedDifficulty);
       levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true).then(() => { // preview em menu
-        food.setAvailablePowerups(levelMgr.powerups);
+        food.setAvailablePowerups(levelMgr.powerups, levelMgr.shieldEveryApples);
         stepDuration = levelMgr.speed;
         applyLevelVisualTheme(levelMgr.currentLevel);
       });
@@ -346,6 +323,8 @@ function openSubMenu(page) {
   }
 
   if (page === MENU_PAGES.SKINS) {
+    levelMgr.setGameplayLayersVisible(false);
+    obstacles.group.visible = false;
     ui.populateSkinGrid(SNAKE_SKINS, selectedSkinIndex, (i) => {
       selectedSkinIndex = i;
       snake.setSkin(i);
@@ -354,8 +333,13 @@ function openSubMenu(page) {
   }
 
   if (page === MENU_PAGES.SETTINGS) {
+    levelMgr.setGameplayLayersVisible(false);
+    obstacles.group.visible = false;
     ui.updateSettingToggle('setting-postfx', postProc.enabled);
     ui.updateSettingToggle('setting-shadows', renderer.shadowMap.enabled);
+    ui.updateSettingToggle('setting-music', sound.isMusicEnabled());
+    ui.updateSettingToggle('setting-sfx', sound.isSfxEnabled());
+    ui.syncAudioVolumeSliders(sound);
     ui.showPanel('panel-settings', true);
   }
 }
@@ -364,6 +348,27 @@ function closeSubMenu() {
   menuPage = MENU_PAGES.MAIN;
   ui.hideAllPanels();
   ui.showPanel('panel-main', true);
+  levelMgr.setGameplayLayersVisible(false);
+  obstacles.group.visible = false;
+}
+
+/** Fecha DEFINIÇÕES e volta ao overlay de pausa (jogo continua em pausa). */
+function closeSettingsAfterPause() {
+  if (!settingsOpenedFromPause || state !== STATES.PAUSED) return;
+  settingsOpenedFromPause = false;
+  ui.showPanel('panel-settings', false);
+  menuPage = MENU_PAGES.MAIN;
+  levelMgr.setGameplayLayersVisible(true);
+  obstacles.group.visible = true;
+  ui.showPause(true);
+}
+
+function openSettingsFromPause() {
+  if (state !== STATES.PAUSED) return;
+  sound.playMenuSelect();
+  settingsOpenedFromPause = true;
+  ui.showPause(false);
+  openSubMenu(MENU_PAGES.SETTINGS);
 }
 
 
@@ -371,8 +376,27 @@ function closeSubMenu() {
 /* ══════════════════════════════════════════════════════════════════════════
    GAME CONTROL
    ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * O `AudioContext` nasce `suspended` sem gesto do utilizador. `enterMenu()` já chama
+ * `startMenuMusic()`, mas o loop só fica audível após `resume()`. Este *one-shot*
+ * garante desbloqueio + reinício da música do menu no primeiro clique ou tecla.
+ */
+let menuAudioGestureResumeArmed = false;
+function ensureAudioResumeOnFirstGesture() {
+  if (menuAudioGestureResumeArmed) return;
+  menuAudioGestureResumeArmed = true;
+  const onGesture = () => {
+    sound.unlockFromUserGesture();
+    if (state === STATES.MENU) sound.startMenuMusic();
+  };
+  document.addEventListener('pointerdown', onGesture, { once: true, capture: true });
+  document.addEventListener('keydown', onGesture, { once: true, capture: true });
+}
+
 function enterMenu() {
   state = STATES.MENU;
+  snake.clearDeathDebris();
   menuPage = MENU_PAGES.MAIN;
   ui.showMenu(true);
   ui.hideAllPanels();
@@ -387,24 +411,29 @@ function enterMenu() {
     new THREE.Vector3(0, 3.2, 0)
   );
   camCtrl.controls.enableRotate = false;
+  camCtrl.setOrbitEnabled(false);
   renderer.domElement.style.cursor = 'default';
+
+  levelMgr.setGameplayLayersVisible(false);
+  obstacles.group.visible = false;
+
+  sound.startMenuMusic();
 }
 
 async function startGame() {
+  sound.unlockFromUserGesture();
   const currentLevel = await levelMgr.loadLevel(selectedMapIndex, selectedDifficulty, true); // sempre skip transition
   applyLevelVisualTheme(currentLevel);
-  food.setAvailablePowerups(levelMgr.powerups);
+  food.setAvailablePowerups(levelMgr.powerups, levelMgr.shieldEveryApples);
   stepDuration = levelMgr.speed;
 
   state = STATES.PLAYING;
   menuPage = MENU_PAGES.MAIN;
+  settingsOpenedFromPause = false;
   score = 0;
   accumulator = 0;
   gameTimer = 0;
-  comboCount = 0;
-  comboTimer = 0;
-  lastEatTime = -999;
-  deathParticles = [];
+  lastHudTimerTick = -1;
   deathShakeTimer = 0;
   deathSlowMotion = false;
   deathSlowTimer = 0;
@@ -420,16 +449,18 @@ async function startGame() {
   previewGroup.visible = false;
   snake.group.visible = true;
   food.group.visible = true;
+  obstacles.group.visible = true;
 
   snake.reset();
   snake.setSkin(selectedSkinIndex);
-  snake.clearTrail();
+  movingWallGraceRemaining = levelMgr.movingWallGraceSeconds;
   food.respawnFood(snake.segments, obstacles.getOccupiedPositions());
 
-  // Iniciar música de fundo
-  sound.startMusic();
+  sound.applyDifficultyPreset(selectedDifficulty);
+  sound.startGameMusic();
 
   // Reset camera for gameplay (instant jump, bypasses damping)
+  camCtrl.setOrbitEnabled(false);
   camCtrl.controls.enableRotate = true;
   camCtrl.resetPosition(
     new THREE.Vector3(0, 18, 14),
@@ -440,8 +471,12 @@ async function startGame() {
   renderer.domElement.focus();
 }
 
-function handleGameOver() {
+function handleGameOver(obstacleCause = null) {
+  ui.showPause(false);
+  settingsOpenedFromPause = false;
+  camCtrl.setOrbitEnabled(false);
   // ── Efeito de morte dramático ──
+  if (obstacleCause) sound.playObstacleStinger(obstacleCause);
   sound.playDeath();
   sound.stopMusic();
 
@@ -451,8 +486,7 @@ function handleGameOver() {
     setTimeout(() => deathFlash.classList.remove('active'), 150);
   }
 
-  // Explosão de partículas
-  deathParticles = snake.explode();
+  snake.explode();
   deathShakeTimer = 0.5; // 0.5s de camera shake
   pendingGameOver = true;
   deathDelayTimer = 1.4; // delay antes de mostrar overlay
@@ -465,31 +499,21 @@ function handleGameOver() {
   }
 }
 
-/** Actualiza partículas da explosão de morte */
-function updateDeathParticles(delta) {
-  for (let i = deathParticles.length - 1; i >= 0; i--) {
-    const p = deathParticles[i];
-    p.userData.life -= delta * p.userData.decay;
-    // Evitar alocação por frame (clone)
-    p.position.addScaledVector(p.userData.velocity, delta);
-    p.userData.velocity.y -= 12 * delta; // gravidade forte
-    p.material.opacity = Math.max(0, p.userData.life);
-    p.scale.setScalar(Math.max(0.1, p.userData.life));
-    p.rotation.x += p.userData.spin * delta;
-    p.rotation.z += p.userData.spin * delta * 0.5;
-
-    if (p.userData.life <= 0) {
-      scene.remove(p);
-      p.geometry.dispose();
-      p.material.dispose();
-      deathParticles.splice(i, 1);
-    }
-  }
-}
-
 function returnToMenu() {
   state = STATES.MENU;
   ui.showGameOver(false);
+  enterMenu();
+}
+
+/** Sai da pausa e volta ao menu principal (música de jogo parada, câmara de menu). */
+function returnToMenuFromPause() {
+  if (state !== STATES.PAUSED) return;
+  settingsOpenedFromPause = false;
+  ui.showPanel('panel-settings', false);
+  sound.playMenuSelect();
+  ui.showPause(false);
+  sound.stopMusic();
+  camCtrl.setOrbitEnabled(false);
   enterMenu();
 }
 
@@ -498,9 +522,19 @@ function togglePause() {
     state = STATES.PAUSED;
     ui.showPause(true);
     camCtrl.setOrbitEnabled(true);
+    sound.stopMusic();
   } else if (state === STATES.PAUSED) {
     state = STATES.PLAYING;
     ui.showPause(false);
+    camCtrl.setOrbitEnabled(false);
+    if (settingsOpenedFromPause) {
+      settingsOpenedFromPause = false;
+      ui.showPanel('panel-settings', false);
+      menuPage = MENU_PAGES.MAIN;
+      levelMgr.setGameplayLayersVisible(true);
+      obstacles.group.visible = true;
+    }
+    sound.startGameMusic();
   }
 }
 
@@ -543,12 +577,13 @@ window.addEventListener('keydown', (e) => {
       hudSound.textContent = muted ? '🔇' : '🔊';
       hudSound.classList.toggle('muted', muted);
     }
-    ui.showNotification(`SOM: ${muted ? 'OFF' : 'ON'}`, 'default');
+    ui.showNotification(`ÁUDIO (P): ${muted ? 'OFF' : 'ON'}`, 'default');
   }
 
   // Espaço
   if (e.code === 'Space') {
     e.preventDefault();
+    if (state === STATES.PAUSED && settingsOpenedFromPause) return;
     if (state === STATES.PLAYING || state === STATES.PAUSED) togglePause();
     if (state === STATES.MENU && menuPage === MENU_PAGES.MAIN) { sound.playMenuSelect(); startGame(); }
     if (state === STATES.GAMEOVER) returnToMenu();
@@ -556,7 +591,10 @@ window.addEventListener('keydown', (e) => {
 
   // Escape — voltar ao menu / fechar sub-menu
   if (e.code === 'Escape') {
-    if (state === STATES.MENU && menuPage !== MENU_PAGES.MAIN) {
+    if (state === STATES.PAUSED && settingsOpenedFromPause) {
+      sound.playMenuSelect();
+      closeSettingsAfterPause();
+    } else if (state === STATES.MENU && menuPage !== MENU_PAGES.MAIN) {
       closeSubMenu();
     } else if (state === STATES.PLAYING) {
       togglePause();
@@ -582,9 +620,50 @@ window.addEventListener('pointerdown', () => {
 // ---- Sub-menu back buttons ----
 document.getElementById('btn-back-levels')?.addEventListener('click', closeSubMenu);
 document.getElementById('btn-back-skins')?.addEventListener('click', closeSubMenu);
-document.getElementById('btn-back-settings')?.addEventListener('click', closeSubMenu);
+document.getElementById('btn-back-settings')?.addEventListener('click', () => {
+  if (settingsOpenedFromPause && state === STATES.PAUSED) {
+    sound.playMenuSelect();
+    closeSettingsAfterPause();
+  } else {
+    closeSubMenu();
+  }
+});
+document.getElementById('btn-pause-menu')?.addEventListener('click', returnToMenuFromPause);
+document.getElementById('btn-pause-settings')?.addEventListener('click', openSettingsFromPause);
 
 // ---- Settings toggles ----
+document.getElementById('setting-music')?.addEventListener('click', () => {
+  sound.unlockFromUserGesture();
+  const on = sound.toggleMusicEnabled({ resumeInMenu: state === STATES.MENU });
+  ui.updateSettingToggle('setting-music', on);
+  ui.showNotification(`MÚSICA AMBIENTE: ${on ? 'ON' : 'OFF'}`, 'default');
+});
+document.getElementById('setting-sfx')?.addEventListener('click', () => {
+  sound.unlockFromUserGesture();
+  const on = sound.toggleSfxEnabled();
+  ui.updateSettingToggle('setting-sfx', on);
+  ui.showNotification(`EFEITOS: ${on ? 'ON' : 'OFF'}`, 'default');
+});
+
+function wireAudioVolumeSlider(rangeId) {
+  const el = document.getElementById(rangeId);
+  if (!el) return;
+  const pctId = `${rangeId}-pct`;
+  const apply = () => {
+    sound.unlockFromUserGesture();
+    const frac = Math.max(0, Math.min(1, Number(el.value) / 100));
+    if (rangeId === 'vol-master') sound.setMasterVolume(frac);
+    else if (rangeId === 'vol-music') sound.setMusicVolume(frac);
+    else if (rangeId === 'vol-sfx') sound.setSfxVolume(frac);
+    const lab = document.getElementById(pctId);
+    if (lab) lab.textContent = `${Math.round(frac * 100)}%`;
+  };
+  el.addEventListener('input', apply);
+}
+wireAudioVolumeSlider('vol-master');
+wireAudioVolumeSlider('vol-music');
+wireAudioVolumeSlider('vol-sfx');
+
 document.getElementById('setting-postfx')?.addEventListener('click', () => {
   const ppOn = postProc.toggle();
   ui.updateSettingToggle('setting-postfx', ppOn);
@@ -596,11 +675,7 @@ document.getElementById('setting-shadows')?.addEventListener('click', () => {
 
 // ---- Resize ----
 window.addEventListener('resize', () => {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  camCtrl.resize(w, h);
-  renderer.setSize(w, h);
-  postProc.resize(w, h);
+  syncRendererSize();
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -611,24 +686,21 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
-  // ---- Ambient particles (sempre visíveis) ----
-  updateAmbientParticles(elapsed);
+  if (snake.hasDeathDebris()) snake.updateDeathDisassembly(delta, obstacles.isWorldPointBlocked.bind(obstacles));
 
   // ---- Menu state ----
   if (state === STATES.MENU) {
     updatePreviewSnake(elapsed);
 
     camCtrl.update(delta);
-    postProc.update(elapsed, delta);
-    postProc.setCamera(camCtrl.camera);
-    postProc.render();
+    // Menu: sem EffectComposer — o pipeline bloom+CRT+pixelate refazia o ecrã inteiro
+    // por frame só para o fundo 3D atrás do overlay HTML (custo enorme em GPUs modestas).
+    renderer.render(scene, camCtrl.camera);
     return;
   }
 
   // ---- Death effect update ----
   if (pendingGameOver) {
-    updateDeathParticles(delta);
-
     // Camera shake
     if (deathShakeTimer > 0) {
       deathShakeTimer -= delta;
@@ -641,6 +713,8 @@ function animate() {
     if (deathDelayTimer <= 0 && pendingGameOver) {
       pendingGameOver = false;
       state = STATES.GAMEOVER;
+      ui.showPause(false);
+      camCtrl.setOrbitEnabled(false);
       if (score > highScore) {
         ui.showNotification('🏆 NEW HIGH SCORE!', 'powerup');
       }
@@ -649,7 +723,6 @@ function animate() {
 
     // Continuar a renderizar durante a morte
     camCtrl.update(delta);
-    food.updateParticles(delta);
     obstacles.update(elapsed, delta);
     levelMgr.updateDecorations(elapsed);
     lightMgr.pulsePointLight(elapsed);
@@ -662,66 +735,45 @@ function animate() {
   // ---- Playing state ----
   if (state === STATES.PLAYING) {
     gameTimer += delta;
-    ui.setTimer(gameTimer);
-
-    // Combo timer decay — combo expira após COMBO_DECAY segundos
-    if (comboCount > 0) {
-      comboTimer -= delta;
-      if (comboTimer <= 0) {
-        comboCount = 0;
-        comboTimer = 0;
-        ui.hideCombo();
-      }
-    }
-
-    // Power-up timer UI update
-    if (snake.shieldActive && snake.shieldMesh) {
-      ui.updatePowerUpTimer('shield', true);
-    }
-    if (snake.speedTimer > 0) {
-      ui.updatePowerUpTimer('speed', true, snake.speedTimer);
-    } else if (!snake.shieldActive) {
-      ui.hidePowerUp();
+    const timerTick = Math.floor(gameTimer);
+    if (timerTick !== lastHudTimerTick) {
+      lastHudTimerTick = timerTick;
+      ui.setTimer(gameTimer);
     }
 
     snake.updatePowerUps(delta);
+
+    // Power-up timer UI (escudo = tempo restante; speed = legado)
+    if (snake.shieldActive && snake.shieldMesh) {
+      ui.updatePowerUpTimer('shield', true, snake.shieldTimeRemaining, SHIELD.durationSec);
+    } else if (snake.speedTimer > 0) {
+      ui.updatePowerUpTimer('speed', true, snake.speedTimer, 10);
+    } else {
+      ui.hidePowerUp();
+    }
+
     const effectiveStep = stepDuration / snake.speedMultiplier;
 
+    const ignoreMovingWallsThisFrame = movingWallGraceRemaining > 0;
+
     accumulator += delta;
-    while (accumulator >= effectiveStep) {
+    let stepsThisFrame = 0;
+    while (accumulator >= effectiveStep && stepsThisFrame < MAX_SNAKE_STEPS_PER_FRAME) {
+      stepsThisFrame += 1;
       accumulator -= effectiveStep;
 
-      const result = snake.updateStep(food.foodCell, (pos) => obstacles.checkCollision(pos));
+      const result = snake.updateStep(food.foodCell, (newHead, prevHead) => obstacles.checkCollisionAlongHeadMove(
+        prevHead,
+        newHead,
+        { ignoreMovingWalls: ignoreMovingWallsThisFrame },
+      ));
 
       /* ── Comeu COMIDA ── */
       if (result.ate) {
         sound.playEat();
 
-        // Combo: só activa quando se come 2 comidas num intervalo curto
-        const now = clock.elapsedTime;
-        const timeSinceLastEat = now - lastEatTime;
-        lastEatTime = now;
-
-        if (timeSinceLastEat <= COMBO_WINDOW) {
-          comboCount++;
-          comboTimer = COMBO_DECAY;
-        } else {
-          comboCount = 1;
-          comboTimer = 0;
-          ui.hideCombo();
-        }
-        const comboMult = COMBO_MULTIPLIERS[Math.min(comboCount, COMBO_MULTIPLIERS.length - 1)];
-
-        const pts = Math.floor(1 * comboMult);
-        score += pts;
+        score += 1;
         ui.setScore(score);
-
-        food.emitCollectParticles(food.foodCell.clone(), food.getCollectColor());
-
-        if (comboCount >= 2) {
-          sound.playCombo();
-          ui.showCombo(comboCount, comboMult);
-        }
 
         // Respawnar comida + tentar spawnar shield
         food.respawnFood(snake.segments, obstacles.getOccupiedPositions());
@@ -735,29 +787,28 @@ function animate() {
         sound.playPowerup();
         ui.showNotification('🛡️ SHIELD ACTIVE!', 'powerup');
         ui.showPowerUp('shield');
-        food.emitCollectParticles(food.shieldCell.clone(), food.getShieldCollectColor());
         food.removeShield();
         score += 3;
         ui.setScore(score);
       }
 
-      // Emitir trail a cada step
-      snake.emitTrail();
+      if (result.shieldBroke) {
+        ui.hidePowerUp();
+        sound.playMenuSelect();
+        ui.showNotification('🛡️ Escudo usado — sem protecção!', 'powerup');
+      }
 
       if (result.dead) {
-        comboCount = 0;
-        comboTimer = 0;
-        lastEatTime = -999;
-        ui.hideCombo();
         ui.hidePowerUp();
-        handleGameOver();
+        handleGameOver(result.obstacleCause ?? null);
       }
 
     }
-  }
 
-  // ---- Trail update ----
-  snake.updateTrail(delta);
+    if (movingWallGraceRemaining > 0) {
+      movingWallGraceRemaining = Math.max(0, movingWallGraceRemaining - delta);
+    }
+  }
 
   // ---- Continuous animations ----
   const alpha = stepDuration > 0 ? accumulator / stepDuration : 1;
@@ -766,15 +817,25 @@ function animate() {
     snake.render(alpha);
   }
 
-  food.update(elapsed);
-  food.updateParticles(delta);
-  obstacles.update(elapsed, delta);
-  levelMgr.updateDecorations(elapsed);
+  const runWorldAnimations = state === STATES.PLAYING;
+  if (runWorldAnimations) {
+    food.update(elapsed);
+    obstacles.update(elapsed, delta);
+    levelMgr.updateDecorations(elapsed);
+  }
 
-  lightMgr.setPointLightPosition(food.foodCell.x, 1.8, food.foodCell.z);
+  lightMgr.setPointLightPosition(
+    gridCellCenterWorldX(food.foodCell.x),
+    1.8,
+    gridCellCenterWorldZ(food.foodCell.z),
+  );
   lightMgr.pulsePointLight(elapsed);
   if (snake.headPosition) {
-    lightMgr.setSpotLightTarget(snake.headPosition.x, 0, snake.headPosition.z);
+    lightMgr.setSpotLightTarget(
+      gridCellCenterWorldX(snake.headPosition.x),
+      0,
+      gridCellCenterWorldZ(snake.headPosition.z),
+    );
   }
 
   if (state === STATES.PLAYING) {

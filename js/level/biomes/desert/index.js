@@ -9,7 +9,7 @@
      cacti.js             ← Cactos
      details.js           ← Crânios, dunas, pedras soltas
      oasis.js             ← Oásis com palmeiras
-     animals.js           ← Escorpião e tumbleweeds
+     animals.js           ← Escorpião
      exterior.js          ← Decoração exterior (pilares, braseiros)
    
    COORDENADAS:
@@ -24,11 +24,11 @@ import { createRockFormation } from './rockFormations.js';
 import { createCactus } from './cacti.js';
 import { createSkull, createSandDune, createScatteredPebbles } from './details.js';
 import { createOasis } from './oasis.js';
-import { createScorpion, createTumbleweeds } from './animals.js';
+import { createScorpion } from './animals.js';
 import { createDesertExterior } from './exterior.js';
 
 export function buildDesertBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem } = helpers;
+  const { loadImportedTexture, createAtmosphericEffect } = helpers;
   const mats = createDesertMaterials(loadImportedTexture);
 
   const m  = half + 1.5;
@@ -164,16 +164,7 @@ export function buildDesertBiome(complexGroup, half, helpers) {
     complexGroup.add(spot.target);
   }
 
-  /* ================================================================
-     TUMBLEWEEDS — Bolas rolantes (efeito atmosférico)
-     ================================================================ */
-  complexGroup.add(createTumbleweeds(0, 0, 6, half));
-
-  /* ================================================================
-     ATMOSFERA E PARTÍCULAS
-     ================================================================ */
   const fog = createAtmosphericEffect('#aa7744', '#cc9955', 0.15, 28, 28);
   fog.position.set(0, 1.0, 0);
   complexGroup.add(fog);
-  complexGroup.add(createParticleSystem('desert', half));
 }

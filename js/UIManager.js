@@ -48,6 +48,8 @@ export class UIManager {
     // ---- Settings ----
     this.settingPostFx  = document.getElementById('setting-postfx');
     this.settingShadows = document.getElementById('setting-shadows');
+    this.settingMusic    = document.getElementById('setting-music');
+    this.settingSfx      = document.getElementById('setting-sfx');
 
     // ---- Notification Container ----
     this.notifContainer = document.getElementById('notification-container');
@@ -57,12 +59,6 @@ export class UIManager {
     this.powerupIcon = document.getElementById('powerup-icon');
     this.powerupLabel = document.getElementById('powerup-label');
     this.powerupBar = document.getElementById('powerup-bar');
-
-    // ---- Combo Display ----
-    this.hudCombo = document.getElementById('hud-combo');
-    this.comboText = document.getElementById('combo-text');
-    this.comboMult = document.getElementById('combo-mult');
-    this._comboTimeout = null;
   }
 
   /* ── Loading ── */
@@ -318,6 +314,22 @@ export class UIManager {
     }
   }
 
+  /** Sincroniza sliders de volume do painel Settings com `SoundManager`. */
+  syncAudioVolumeSliders(sound) {
+    const pairs = [
+      ['vol-master', sound.getMasterVolume()],
+      ['vol-music', sound.getMusicVolume()],
+      ['vol-sfx', sound.getSfxVolume()],
+    ];
+    for (const [id, frac] of pairs) {
+      const pct = Math.round(frac * 100);
+      const range = document.getElementById(id);
+      const label = document.getElementById(`${id}-pct`);
+      if (range) range.value = String(pct);
+      if (label) label.textContent = `${pct}%`;
+    }
+  }
+
   /* ── Notificações ── */
   showNotification(text, type = 'default', duration = 2000) {
     if (!this.notifContainer) return;
@@ -334,7 +346,9 @@ export class UIManager {
 
   /**
    * Mostra o indicador de power-up activo no HUD.
-   * @param {string} type — 'shield', 'speed', etc.
+   * No mapa só existe pickup de **shield**; as chaves `speed` abaixo são para UI legada
+   * (a cobra tem API de *speed boost* mas sem item que o active no jogo actual).
+   * @param {string} type — em uso: `'shield'`. `'speed'`, etc.: reservado / legado.
    */
   showPowerUp(type) {
     if (!this.hudPowerup) return;
@@ -350,12 +364,13 @@ export class UIManager {
    * Actualiza a barra de countdown do power-up.
    * @param {string} type — tipo do power-up
    * @param {boolean} active — se está activo
-   * @param {number} [remaining] — segundos restantes (opcional para shield permanente)
+   * @param {number} [remaining] — segundos restantes
+   * @param {number} [maxDuration] — duração total (s) para calcular a percentagem da barra (por defeito 10)
    */
-  updatePowerUpTimer(type, active, remaining) {
+  updatePowerUpTimer(type, active, remaining, maxDuration = 10) {
     if (!this.hudPowerup || !active) return;
-    if (remaining != null && this.powerupBar) {
-      const pct = Math.max(0, Math.min(100, (remaining / 10) * 100));
+    if (remaining != null && this.powerupBar && maxDuration > 0) {
+      const pct = Math.max(0, Math.min(100, (remaining / maxDuration) * 100));
       this.powerupBar.style.width = `${pct}%`;
     }
   }
@@ -365,43 +380,6 @@ export class UIManager {
    */
   hidePowerUp() {
     if (this.hudPowerup) this.hudPowerup.classList.add('hidden');
-  }
-
-  /* ── Combo Display ── */
-
-  /**
-   * Mostra o indicador de combo no HUD com animação.
-   * @param {number} count — número de comidas seguidas
-   * @param {number} multiplier — multiplicador de pontos
-   */
-  showCombo(count, multiplier) {
-    if (!this.hudCombo) return;
-    if (this.comboText) this.comboText.textContent = `COMBO ×${count}`;
-    if (this.comboMult) this.comboMult.textContent = `×${multiplier} PTS`;
-
-    // Re-trigger animation
-    this.hudCombo.classList.remove('hidden');
-    this.hudCombo.style.animation = 'none';
-    // Force reflow
-    void this.hudCombo.offsetHeight;
-    this.hudCombo.style.animation = '';
-
-    // Auto-hide after 3s (reset if called again)
-    if (this._comboTimeout) clearTimeout(this._comboTimeout);
-    this._comboTimeout = setTimeout(() => {
-      this.hideCombo();
-    }, 3000);
-  }
-
-  /**
-   * Esconde o display de combo.
-   */
-  hideCombo() {
-    if (this.hudCombo) this.hudCombo.classList.add('hidden');
-    if (this._comboTimeout) {
-      clearTimeout(this._comboTimeout);
-      this._comboTimeout = null;
-    }
   }
 
   /* ── Helpers ── */

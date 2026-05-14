@@ -10,7 +10,7 @@
      vegetation.js   ← Fetos, arbustos, flores
      rocks.js        ← Rochas, troncos caídos, tocos
      creek.js        ← Riacho com água animada
-     animals.js      ← Coelhos e borboletas
+     animals.js      ← Coelhos
      exterior.js     ← Decoração exterior (tochas, postes, trepadeiras)
    
    COORDENADAS:
@@ -26,11 +26,11 @@ import { createMushroom } from './mushrooms.js';
 import { createFern, createBush, createFlowerPatch } from './vegetation.js';
 import { createMossyRock, createFallenLog, createTreeStump } from './rocks.js';
 import { createCreek } from './creek.js';
-import { createRabbit, createButterflies } from './animals.js';
+import { createRabbit } from './animals.js';
 import { createForestExterior } from './exterior.js';
 
 export function buildForestBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem } = helpers;
+  const { loadImportedTexture } = helpers;
   const mats = createForestMaterials(loadImportedTexture);
 
   // Zonas exteriores — quanto maior, mais longe das paredes
@@ -225,17 +225,4 @@ export function buildForestBiome(complexGroup, half, helpers) {
     complexGroup.add(spot);
     complexGroup.add(spot.target);
   }
-
-  /* ================================================================
-     BORBOLETAS — Efeito atmosférico
-     ================================================================ */
-  complexGroup.add(createButterflies(0, 0, 10, half * 3));
-
-  /* ================================================================
-     ATMOSFERA E PARTÍCULAS
-     ================================================================ */
-  const fog = createAtmosphericEffect('#225533', '#44aa44', 0.2, 28, 28);
-  fog.position.set(0, 0.8, 0);
-  complexGroup.add(fog);
-  complexGroup.add(createParticleSystem('forest', half));
 }

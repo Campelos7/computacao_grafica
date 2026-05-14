@@ -8,8 +8,10 @@
    2 — SpotLight (Holofote): cone focado que segue a cabeça da cobra
    3 — PointLight (Aura): brilho forte e localizado na comida
    4 — AmbientLight (Base): iluminação mínima global
+   Sombra da direccional (tamanho do mapa): `js/gameConfig.js` → `LIGHTING`.
    ========================================================================== */
 import * as THREE from 'three';
+import { LIGHTING } from './gameConfig.js';
 
 export class LightManager {
   /**
@@ -28,7 +30,8 @@ export class LightManager {
     this.directional.name = 'directional';
     this.directional.position.set(15, 22, 10);
     this.directional.castShadow = true;
-    this.directional.shadow.mapSize.set(1024, 1024);
+    // Mapa de sombras — dimensão em `gameConfig.js` (`LIGHTING.directionalShadowMapSize`).
+    this.directional.shadow.mapSize.set(LIGHTING.directionalShadowMapSize, LIGHTING.directionalShadowMapSize);
     this.directional.shadow.camera.left   = -18;
     this.directional.shadow.camera.right  =  18;
     this.directional.shadow.camera.top    =  18;
@@ -47,8 +50,9 @@ export class LightManager {
     this.spot = new THREE.SpotLight(0xffffff, 5.0, 30, Math.PI / 6, 0.4, 1.0);
     this.spot.name = 'spotlight';
     this.spot.position.set(0, 12, 0);
-    this.spot.castShadow = true;
-    this.spot.shadow.mapSize.set(512, 512);
+    // Só a directional projecta sombras: duas fontes com shadow map duplica custo por frame.
+    this.spot.castShadow = false;
+    this.spot.shadow.mapSize.set(256, 256);
     this.spot.shadow.bias = -0.001;
     this.spot.shadow.normalBias = 0.02;
     // Target para o spotlight — será atualizado no game loop

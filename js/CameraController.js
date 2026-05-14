@@ -16,7 +16,7 @@
    ========================================================================== */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { BOARD_SIZE } from './utils/helpers.js';
+import { BOARD_SIZE, gridCellCenterWorldX, gridCellCenterWorldZ } from './utils/helpers.js';
 
 export class CameraController {
   /**
@@ -137,7 +137,7 @@ export class CameraController {
     /* Só a perspectiva segue a cobra; a ortho fica fixa no centro */
     if (this.isPerspective) {
       this._followBehind.copy(direction).multiplyScalar(-8);
-      this._followTarget.set(headPos.x, 0, headPos.z);
+      this._followTarget.set(gridCellCenterWorldX(headPos.x), 0, gridCellCenterWorldZ(headPos.z));
       this._followPos.set(
         this._followTarget.x + this._followBehind.x,
         14,

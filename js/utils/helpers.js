@@ -9,6 +9,24 @@ export const BOARD_SIZE = 20;
 export const CELL_SIZE = 1;
 export const HALF_BOARD = Math.floor(BOARD_SIZE / 2);
 
+/** Centro da célula (coordenadas lógicas –HALF_BOARD..HALF_BOARD–1) no mundo — alinha com GridHelper e com ±half do tabuleiro. */
+export function gridCellCenterWorldX(gx) {
+  return gx * CELL_SIZE + 0.5 * CELL_SIZE;
+}
+
+export function gridCellCenterWorldZ(gz) {
+  return gz * CELL_SIZE + 0.5 * CELL_SIZE;
+}
+
+/** Inverso de gridCellCenterWorld*: posição X/Z no mundo → índice de célula (para obstáculos / spawn). */
+export function worldToGridCellX(worldX) {
+  return Math.round(worldX / CELL_SIZE - 0.5);
+}
+
+export function worldToGridCellZ(worldZ) {
+  return Math.round(worldZ / CELL_SIZE - 0.5);
+}
+
 // ---- Direcções da cobra ----
 export const DIRS = {
   up:    new THREE.Vector3( 0, 0, -1),

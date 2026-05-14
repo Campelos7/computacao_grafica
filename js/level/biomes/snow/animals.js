@@ -3,7 +3,7 @@
    --------------------------------------------------------------------------
    GUIA DE EDIÇÃO:
    - Pinguim: tamanho das esferas, cor do bico
-   - Fogueira: partículas shader, PointLight intensidade
+   - Fogueira: troncos, pedras, PointLight (sem partículas)
    ========================================================================== */
 import * as THREE from 'three';
 
@@ -66,7 +66,7 @@ export function createPenguin(x, z, scale) {
   g.position.set(x, 0, z); return g;
 }
 
-/** Fogueira com partículas de fogo e luz */
+/** Fogueira com luz (sem partículas) */
 export function createCampfire(x, z, scale, mats) {
   const g = new THREE.Group(); g.name = 'snow-campfire';
 
@@ -91,50 +91,6 @@ export function createCampfire(x, z, scale, mats) {
   // Luz do fogo
   const fireLight = new THREE.PointLight(0xff6622, 1.2, 5);
   fireLight.position.y = 0.15 * scale; fireLight.name = 'campfire-light'; g.add(fireLight);
-
-  // Partículas de fogo (shader simples)
-  const count = 12;
-  const positions = new Float32Array(count * 3);
-  const phases = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 0.08 * scale;
-    positions[i * 3 + 1] = 0.05 * scale + Math.random() * 0.2 * scale;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 0.08 * scale;
-    phases[i] = Math.random() * Math.PI * 2;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-
-  const fireMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 } },
-    vertexShader: `
-      attribute float aPhase; uniform float uTime; varying float vAlpha; varying float vHeight;
-      void main() {
-        vec3 pos = position;
-        float life = mod(uTime * 1.5 + aPhase, 2.0);
-        pos.y += life * 0.3;
-        pos.x += sin(uTime * 3.0 + aPhase) * 0.03;
-        vHeight = life / 2.0; vAlpha = 1.0 - vHeight;
-        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = (3.0 - life) * (120.0 / -mvPos.z);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
-    fragmentShader: `
-      varying float vAlpha; varying float vHeight;
-      void main() {
-        float d = length(gl_PointCoord - vec2(0.5));
-        if (d > 0.5) discard;
-        vec3 color = mix(vec3(1.0, 0.6, 0.1), vec3(1.0, 0.2, 0.0), vHeight);
-        float alpha = (1.0 - d * 2.0) * vAlpha * 0.8;
-        gl_FragColor = vec4(color, alpha);
-      }
-    `,
-  });
-  const fire = new THREE.Points(geo, fireMat);
-  fire.name = 'campfire-particles'; g.add(fire);
 
   g.position.set(x, 0, z); return g;
 }

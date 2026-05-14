@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
 /**
+ * @deprecated O `LevelManager` usa **`js/level/biomes/desert/index.js`**. Este ficheiro é só referência.
+ *
  * BIOMA DESERTO
  * --------------------------------------------------------------------------
  * GUIA RÁPIDO PARA A DEFESA:
@@ -17,10 +19,10 @@ import * as THREE from 'three';
  *
  * @param {THREE.Group} complexGroup
  * @param {number} half
- * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function, createParticleSystem: Function}} helpers
+ * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function}} helpers
  */
 export function buildDesertBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem } = helpers;
+  const { loadImportedTexture, createAtmosphericEffect } = helpers;
 
   // Materiais do deserto (pedra clara/escura).
   // Ajusta aqui para mudar a identidade visual geral.
@@ -155,9 +157,7 @@ export function buildDesertBiome(complexGroup, half, helpers) {
     complexGroup.add(s);
   }
 
-  // Atmosfera poeirenta + partículas de areia.
+  // Atmosfera poeirenta.
   const fog = createAtmosphericEffect('#aa7744', '#cc9955', 0.15, 28, 28);
   fog.position.set(0, 1.0, 0); complexGroup.add(fog);
-  const particles = createParticleSystem('desert', half);
-  complexGroup.add(particles);
 }

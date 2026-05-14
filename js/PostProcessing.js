@@ -1,5 +1,6 @@
 /* ==========================================================================
    PostProcessing.js — Pipeline de Pós-Processamento Retro
+   Parâmetros afináveis (bloom, CRT, film grain): `js/gameConfig.js` → `POST_FX`.
    Requisito: EffectComposer pipeline com RenderPass, CRT Shader (scanlines,
    curvatura, aberração cromática), UnrealBloomPass, Pixelate Shader, FilmPass.
    Toggle completo com tecla M.
@@ -10,6 +11,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { POST_FX } from './gameConfig.js';
 
 /* ==========================================================================
    GLSL Shaders Personalizados
@@ -32,11 +34,11 @@ const CRTShader = {
     // - uScanlineCount: quantidade/frequência de scanlines
     // - uChromaOffset: separação RGB (aberração cromática)
     // - uVignette: escurecimento das bordas
-    uCurvature:        { value: 6.0 },
-    uScanlineIntensity:{ value: 0.06 },
-    uScanlineCount:    { value: 500.0 },
-    uChromaOffset:     { value: 0.001 },
-    uVignette:         { value: 0.25 },
+    uCurvature:        { value: POST_FX.crt.curvature },
+    uScanlineIntensity:{ value: POST_FX.crt.scanlineIntensity },
+    uScanlineCount:    { value: POST_FX.crt.scanlineCount },
+    uChromaOffset:     { value: POST_FX.crt.chromaOffset },
+    uVignette:         { value: POST_FX.crt.vignette },
   },
 
   // Vertex shader — passthrough com UVs
@@ -123,7 +125,7 @@ const PixelateShader = {
     // GUIA DE EDIÇÃO (PIXELATE):
     // - valores menores => imagem mais pixelizada
     // - valores maiores => efeito mais subtil
-    uPixelSize:  { value: new THREE.Vector2(1920, 1080) },
+    uPixelSize:  { value: new THREE.Vector2(POST_FX.pixelateVirtualResolution.x, POST_FX.pixelateVirtualResolution.y) },
   },
 
   vertexShader: /* glsl */`
@@ -211,6 +213,11 @@ export class PostProcessing {
 
     const size = renderer.getSize(new THREE.Vector2());
 
+    // Resolução interna do bloom — ver `POST_FX.bloomInternalScale` em `gameConfig.js`.
+    const bloomScale = POST_FX.bloomInternalScale;
+    const bloomW = Math.max(2, Math.floor(size.x * bloomScale));
+    const bloomH = Math.max(2, Math.floor(size.y * bloomScale));
+
     // ---- Requisito: Pipeline EffectComposer ----
     this.composer = new EffectComposer(renderer);
 
@@ -224,7 +231,7 @@ export class PostProcessing {
     // - radius: espalhamento do bloom
     // - threshold: quão "brilhante" precisa ser para aplicar bloom
     this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.x, size.y),
+      new THREE.Vector2(bloomW, bloomH),
       0.5,   // strength — subtil glow
       0.4,   // radius
       0.82   // threshold — só materiais muito brilhantes
@@ -239,11 +246,15 @@ export class PostProcessing {
     // 4. ShaderPass (Pixelate) — downsample retro
     this.pixelPass = new ShaderPass(PixelateShader);
     this.pixelPass.uniforms.uResolution.value.set(size.x, size.y);
-    this.pixelPass.uniforms.uPixelSize.value.set(1920, 1080);
+    this.pixelPass.uniforms.uPixelSize.value.set(
+      POST_FX.pixelateVirtualResolution.x,
+      POST_FX.pixelateVirtualResolution.y,
+    );
     this.composer.addPass(this.pixelPass);
 
-    // 5. ShaderPass (Film grain)
+    // 5. Film grain — passo fullscreen extra; desactivado por defeito para suavidade (ligar: enabled = true).
     this.filmPass = new ShaderPass(FilmGrainShader);
+    this.filmPass.enabled = POST_FX.filmGrainPassEnabled;
     this.composer.addPass(this.filmPass);
 
     // 6. OutputPass — correcção de cor final
@@ -283,7 +294,7 @@ export class PostProcessing {
    */
   update(elapsed, delta) {
     this.crtPass.uniforms.uTime.value = elapsed;
-    this.filmPass.uniforms.uTime.value = elapsed;
+    if (this.filmPass.enabled) this.filmPass.uniforms.uTime.value = elapsed;
   }
 
   /**
@@ -306,6 +317,6 @@ export class PostProcessing {
     this.composer.setSize(width, height);
     this.crtPass.uniforms.uResolution.value.set(width, height);
     this.pixelPass.uniforms.uResolution.value.set(width, height);
-    this.bloomPass.resolution.set(width, height);
+    const bloomScale = POST_FX.bloomInternalScale;
   }
 }

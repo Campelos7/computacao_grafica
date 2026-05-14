@@ -2,15 +2,18 @@
    LevelManager.js — Sistema de Níveis com Biomas Naturais
    Requisito: Ficheiro JSON com temas diferentes (cores, nevoeiro, velocidade,
    obstáculos). loadLevel() limpa a cena, aplica o tema, gera obstáculos.
-   Transição suave entre níveis (fade). Importar ≥2 modelos GLTF.
-   
+   A transição em fade entre níveis foi removida — o mapa carrega directamente.
+
+   Modelos GLB (decoração): ficheiros em assets/models/, carregados no boot
+   por js/ModelLoader.js (não existe pasta js/complex-objects/).
+
    Biomas: Floresta Tropical, Deserto Canyon, Montanha de Neve
-   Cada nível inclui objetos complexos temáticos + texturas importadas +
-   sistema de partículas + decorações com shader + skybox gradiente.
+   Cada nível inclui cenário procedural em js/level/biomes/, texturas .png,
+   decorações com shader, skybox gradiente e (opcional) meshes GLB.
    ========================================================================== */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { BOARD_SIZE, CELL_SIZE, createCanvasTexture, disposeGroup, hexToColor } from './utils/helpers.js';
+import { addArenaPerimeterWalls } from './obstacles/Walls.js';
 import { DIFFICULTY_PRESETS } from './level/difficultyPresets.js';
 import { buildForestBiome } from './level/biomes/forest/index.js';
 import { buildDesertBiome } from './level/biomes/desert/index.js';
@@ -322,212 +325,6 @@ function createSkybox(topColor, midColor, bottomColor) {
   return sky;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   SISTEMA DE PARTÍCULAS POR BIOMA
-   Points + BufferGeometry + atributos animados
-   ══════════════════════════════════════════════════════════════════════════ */
-
-function createParticleSystem(biome, boardHalf) {
-  const group = new THREE.Group();
-  group.name = 'particle-system';
-
-  if (biome === 'forest') {
-    // ── Pirilampos (Fireflies) ──
-    const count = 20; // Optimizado: reduzido de 40 para performance
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const phases = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-      positions[i*3]   = (Math.random() - 0.5) * boardHalf * 2.5;
-      positions[i*3+1] = 0.3 + Math.random() * 3.5;
-      positions[i*3+2] = (Math.random() - 0.5) * boardHalf * 2.5;
-      sizes[i] = 2 + Math.random() * 4;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-
-    const mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      uniforms: {
-        uTime: { value: 0 },
-        uColor: { value: new THREE.Color('#88ff44') },
-      },
-      vertexShader: `
-        attribute float aSize;
-        attribute float aPhase;
-        uniform float uTime;
-        varying float vAlpha;
-        void main() {
-          vec3 pos = position;
-          pos.x += sin(uTime * 0.3 + aPhase) * 0.5;
-          pos.y += sin(uTime * 0.5 + aPhase * 2.0) * 0.3;
-          pos.z += cos(uTime * 0.4 + aPhase * 1.5) * 0.4;
-          vAlpha = (sin(uTime * 2.0 + aPhase * 3.0) * 0.5 + 0.5);
-          vAlpha *= vAlpha;
-          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = aSize * (200.0 / -mvPos.z);
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uColor;
-        varying float vAlpha;
-        void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float glow = 1.0 - d * 2.0;
-          glow = pow(glow, 2.0);
-          gl_FragColor = vec4(uColor, glow * vAlpha * 0.8);
-        }
-      `,
-    });
-
-    const points = new THREE.Points(geo, mat);
-    points.name = 'fireflies';
-    group.add(points);
-
-  } else if (biome === 'desert') {
-    // ── Areia soprada (Sand particles) ──
-    const count = 50; // Optimizado: reduzido de 100 para performance
-    const positions = new Float32Array(count * 3);
-    const speeds = new Float32Array(count);
-    const phases = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-      positions[i*3]   = (Math.random() - 0.5) * boardHalf * 3;
-      positions[i*3+1] = 0.1 + Math.random() * 2.5;
-      positions[i*3+2] = (Math.random() - 0.5) * boardHalf * 3;
-      speeds[i] = 1.0 + Math.random() * 3.0;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-
-    const mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uColor: { value: new THREE.Color('#ccaa66') },
-        uBounds: { value: boardHalf * 1.5 },
-      },
-      vertexShader: `
-        attribute float aSpeed;
-        attribute float aPhase;
-        uniform float uTime;
-        uniform float uBounds;
-        varying float vAlpha;
-        void main() {
-          vec3 pos = position;
-          pos.x += uTime * aSpeed;
-          pos.x = mod(pos.x + uBounds, uBounds * 2.0) - uBounds;
-          pos.y += sin(uTime * 1.5 + aPhase) * 0.15;
-          pos.z += sin(uTime * 0.7 + aPhase * 2.0) * 0.3;
-          vAlpha = 0.3 + sin(aPhase + uTime) * 0.15;
-          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = (1.5 + sin(aPhase) * 0.5) * (150.0 / -mvPos.z);
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uColor;
-        varying float vAlpha;
-        void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float soft = 1.0 - d * 2.0;
-          gl_FragColor = vec4(uColor, soft * vAlpha);
-        }
-      `,
-    });
-
-    const points = new THREE.Points(geo, mat);
-    points.name = 'sand-particles';
-    group.add(points);
-
-  } else if (biome === 'snow') {
-    // ── Flocos de neve (Snowflakes) ──
-    const count = 60; // Optimizado: reduzido de 120 para performance
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const phases = new Float32Array(count);
-    const speeds = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-      positions[i*3]   = (Math.random() - 0.5) * boardHalf * 3;
-      positions[i*3+1] = Math.random() * 12;
-      positions[i*3+2] = (Math.random() - 0.5) * boardHalf * 3;
-      sizes[i] = 2 + Math.random() * 4;
-      phases[i] = Math.random() * Math.PI * 2;
-      speeds[i] = 0.3 + Math.random() * 0.8;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-    geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-
-    const mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uColor: { value: new THREE.Color('#ddeeff') },
-      },
-      vertexShader: `
-        attribute float aSize;
-        attribute float aPhase;
-        attribute float aSpeed;
-        uniform float uTime;
-        varying float vAlpha;
-        void main() {
-          vec3 pos = position;
-          pos.y -= mod(uTime * aSpeed, 12.0);
-          if (pos.y < 0.0) pos.y += 12.0;
-          pos.x += sin(uTime * 0.5 + aPhase) * 1.2;
-          pos.z += cos(uTime * 0.3 + aPhase * 1.3) * 0.8;
-          vAlpha = 0.4 + sin(aPhase + uTime * 0.5) * 0.2;
-          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = aSize * (180.0 / -mvPos.z);
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uColor;
-        varying float vAlpha;
-        void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float soft = 1.0 - d * 2.0;
-          float sparkle = pow(soft, 3.0);
-          gl_FragColor = vec4(uColor, (soft * 0.6 + sparkle * 0.4) * vAlpha);
-        }
-      `,
-    });
-
-    const points = new THREE.Points(geo, mat);
-    points.name = 'snowflakes';
-    group.add(points);
-  }
-
-  return group;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   EFEITO ATMOSFÉRICO — ShaderMaterial com scroll UV
-   ══════════════════════════════════════════════════════════════════════════ */
-
 function createAtmosphericEffect(color1, color2, opacity, scaleX, scaleZ) {
   const group = new THREE.Group();
   group.name = 'atmospheric-fog';
@@ -675,9 +472,11 @@ export class LevelManager {
     this.currentDifficultyId = 'easy';
     this.boardGroup = new THREE.Group(); this.boardGroup.name = 'board'; this.scene.add(this.boardGroup);
     this.decorGroup = new THREE.Group(); this.decorGroup.name = 'decorations'; this.scene.add(this.decorGroup);
-    this.complexGroup = new THREE.Group(); this.complexGroup.name = 'complex-objects'; this.scene.add(this.complexGroup);
+    this.complexGroup = new THREE.Group();
+    // Nome na árvore Three.js (útil no inspector). Não corresponde a nenhuma pasta do repo; GLB vivem em assets/models/ + ModelLoader.js.
+    this.complexGroup.name = 'complex-objects';
+    this.scene.add(this.complexGroup);
     this.skyboxMesh = null;
-    this.gltfLoader = new GLTFLoader();
     this.loadedModels = {};
     this.gridHelper = null;
 
@@ -686,17 +485,13 @@ export class LevelManager {
       trophyStars: [],
       trophyRings: [],
       fogUniformMats: [],
-      particleUniformMats: [],
       auroraUniformMats: [],
       pineTips: [],
       mushroomGlows: [],
       crystalLights: [],
       // Novos objectos animados
       creekWaterMats: [],       // Shader do riacho (floresta)
-      butterflyMats: [],        // Borboletas (floresta)
-      tumbleweedMats: [],       // Tumbleweeds (deserto)
       oasisWaterMats: [],       // Água do oásis (deserto)
-      campfireParticleMats: [], // Partículas fogo (neve)
       campfireLights: [],       // Luz da fogueira (neve)
       frozenLakeMats: [],       // Shader do lago gelado (neve)
       treeCanopies: [],         // Copas de árvores p/ animação vento
@@ -711,6 +506,20 @@ export class LevelManager {
       braseiroFlames: [],       // Chamas dos braseiros (deserto)
       icePillarLights: [],      // Luzes dos pilares gelo (neve)
     };
+  }
+
+  /**
+   * No menu principal o nível 3D completo ainda estava na cena — o GPU renderava
+   * bioma + tabuleiro + obstáculos + pós-processamento só como fundo atrás do HTML.
+   * @param {boolean} visible — false no menu (excepto pré-visualização de mapas)
+   */
+  setGameplayLayersVisible(visible) {
+    this.boardGroup.visible = visible;
+    this.decorGroup.visible = visible;
+    this.complexGroup.visible = visible;
+    if (this.gridHelper) this.gridHelper.visible = visible;
+    if (this.skyboxMesh) this.skyboxMesh.visible = visible;
+    this.scene.background = visible ? null : new THREE.Color(0x0a0a1a);
   }
 
   async loadConfig(url) {
@@ -733,78 +542,12 @@ export class LevelManager {
     }
   }
 
-  async loadModels(onProgress) {
-    const modelDefs = [
-      { name: 'arcade', path: 'models/arcade_cabinet.glb' },
-      { name: 'trophy', path: 'models/trophy.glb' },
-    ];
-    for (let i = 0; i < modelDefs.length; i++) {
-      const def = modelDefs[i];
-      try {
-        const gltf = await this._loadGLTF(def.path);
-        this.loadedModels[def.name] = gltf.scene;
-      } catch (err) {
-        console.warn(`Modelo GLTF "${def.path}" não encontrado, criando proceduralmente.`);
-        this.loadedModels[def.name] = this._createProceduralModel(def.name);
-      }
-      if (onProgress) onProgress((i + 1) / modelDefs.length);
-    }
-  }
-
-  _loadGLTF(path, timeoutMs = 7000) {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const timeoutId = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        reject(new Error(`Timeout a carregar modelo: ${path}`));
-      }, timeoutMs);
-
-      this.gltfLoader.load(
-        path,
-        (gltf) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeoutId);
-          resolve(gltf);
-        },
-        undefined,
-        (error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeoutId);
-          reject(error);
-        }
-      );
-    });
-  }
-
-  _createProceduralModel(name) {
-    const group = new THREE.Group();
-    if (name === 'arcade') {
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, emissive: 0x0d0d1a, roughness: 0.7, metalness: 0.3 });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 0.8), bodyMat); body.position.y = 1.2;
-      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.6), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 }));
-      screen.position.set(0, 0.5, 0.41); body.add(screen);
-      const btnGeo = new THREE.SphereGeometry(0.06, 8, 6);
-      [0xff00ff, 0x00ff00, 0xffff00, 0xff0000].forEach((c, i) => {
-        const btn = new THREE.Mesh(btnGeo, new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.5 }));
-        btn.position.set(-0.2+i*0.13, -0.3, 0.41); body.add(btn);
-      });
-      const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 0.3), new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 0.6 }));
-      top.position.y = 2.55; body.add(top);
-      group.add(body); group.scale.setScalar(0.7);
-    }
-    if (name === 'trophy') {
-      const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.6, 8), new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.6, metalness: 0.4 }));
-      pedestal.position.y = 0.3;
-      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffaa00, emissiveIntensity: 0.8, roughness: 0.1, metalness: 0.7 }));
-      star.position.y = 0.9; star.name = 'trophy-star';
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.03, 12, 24), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.6 }));
-      ring.position.y = 0.9; ring.rotation.x = Math.PI/2; ring.name = 'trophy-ring';
-      group.add(pedestal, star, ring); group.scale.setScalar(0.8);
-    }
-    return group;
+  /**
+   * Mapa id → cena/object3D (ex.: arcade, trophy), preenchido por ModelLoader no boot.
+   * @param {Record<string, THREE.Object3D>} models
+   */
+  setDecorModels(models) {
+    this.loadedModels = models && typeof models === 'object' ? models : {};
   }
 
   _getGroundTexture(biome) {
@@ -945,20 +688,14 @@ export class LevelManager {
       emissive: hexToColor(theme.wallEmissive || '#22cc44'), emissiveIntensity: 0.12,
       roughness: 0.7, metalness: 0.15,
     });
-    const wallDefs = [
-      { size: [boardWidth+wallThick*2, wallHeight, wallThick], pos: [0, wallHeight*0.5, half+wallThick*0.5] },
-      { size: [boardWidth+wallThick*2, wallHeight, wallThick], pos: [0, wallHeight*0.5, -half-wallThick*0.5] },
-      { size: [wallThick, wallHeight, boardWidth], pos: [half+wallThick*0.5, wallHeight*0.5, 0] },
-      { size: [wallThick, wallHeight, boardWidth], pos: [-half-wallThick*0.5, wallHeight*0.5, 0] },
-    ];
-    for (const def of wallDefs) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(...def.size), wallMat);
-      wall.position.set(...def.pos); wall.castShadow = true; wall.receiveShadow = true; wall.name = 'wall';
-      const edgeMat = new THREE.MeshBasicMaterial({ color: hexToColor(theme.wallEmissive || '#22cc44'), transparent: true, opacity: 0.25 });
-      const edge = new THREE.Mesh(new THREE.BoxGeometry(def.size[0]+0.02, 0.04, def.size[2]+0.02), edgeMat);
-      edge.position.y = wallHeight*0.5; wall.add(edge);
-      this.boardGroup.add(wall);
-    }
+    addArenaPerimeterWalls(this.boardGroup, {
+      boardWidth,
+      wallMaterial: wallMat,
+      hexToColor,
+      wallEmissiveHex: theme.wallEmissive || '#22cc44',
+      wallHeight,
+      wallThick,
+    });
 
     // ---- Grid ----
     const gridColor = hexToColor(theme.gridColor || '#44ff44');
@@ -974,7 +711,7 @@ export class LevelManager {
     // ---- Decorações GLTF ----
     this._placeDecorations();
 
-    // ---- Bioma completo (objetos + partículas + decoração shader) ----
+    // ---- Bioma completo (objetos + decoração shader) ----
     this._buildBiomeEnvironment(biome, half);
 
     // Otimizações de performance (por nível)
@@ -987,6 +724,10 @@ export class LevelManager {
     // ---- UI ----
     this.ui.setLevel(`MAPA: ${level.name} | DIFICULDADE: ${difficulty.name}`);
 
+    // Após rebuild, grupos têm de ficar visíveis (no menu principal ficaram .visible = false).
+    this.setGameplayLayersVisible(true);
+    this.obstacles.group.visible = true;
+
     return level;
   }
 
@@ -994,7 +735,6 @@ export class LevelManager {
     const helpers = {
       loadImportedTexture,
       createAtmosphericEffect,
-      createParticleSystem,
       createAuroraBorealis,
     };
     switch (biome) {
@@ -1019,7 +759,12 @@ export class LevelManager {
       const clone = model.clone();
       clone.position.copy(dec.pos); clone.rotation.y = dec.rot;
       clone.name = `decor-${dec.name}`;
-      clone.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+      clone.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = false;
+          child.receiveShadow = false;
+        }
+      });
       this.decorGroup.add(clone);
     }
   }
@@ -1034,11 +779,8 @@ export class LevelManager {
       child.rotation.z += 0.03;
     }
 
-    // ── Shaders atmosféricos (fog, partículas, aurora) ──
+    // ── Shaders atmosféricos (fog, aurora) ──
     for (const mat of this._animRefs.fogUniformMats) {
-      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
-    }
-    for (const mat of this._animRefs.particleUniformMats) {
       if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
     }
     for (const mat of this._animRefs.auroraUniformMats) {
@@ -1086,23 +828,8 @@ export class LevelManager {
       if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
     }
 
-    // ── NOVOS: Borboletas (shader partículas floresta) ──
-    for (const mat of this._animRefs.butterflyMats) {
-      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
-    }
-
-    // ── NOVOS: Tumbleweeds (shader partículas deserto) ──
-    for (const mat of this._animRefs.tumbleweedMats) {
-      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
-    }
-
     // ── NOVOS: Água do oásis (shader deserto) ──
     for (const mat of this._animRefs.oasisWaterMats) {
-      if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
-    }
-
-    // ── NOVOS: Partículas de fogo da fogueira (neve) ──
-    for (const mat of this._animRefs.campfireParticleMats) {
       if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = elapsed;
     }
 
@@ -1168,9 +895,6 @@ export class LevelManager {
       if (n === 'fog-plane' || n === 'fog-plane-upper') {
         if (child.material?.uniforms?.uTime) this._animRefs.fogUniformMats.push(child.material);
       }
-      if (n === 'fireflies' || n === 'sand-particles' || n === 'snowflakes') {
-        if (child.material?.uniforms?.uTime) this._animRefs.particleUniformMats.push(child.material);
-      }
       if (n === 'aurora-plane' || n === 'aurora-plane-2') {
         if (child.material?.uniforms?.uTime) this._animRefs.auroraUniformMats.push(child.material);
       }
@@ -1186,21 +910,12 @@ export class LevelManager {
       if (n === 'pine-layer') this._animRefs.pineLayers.push(child);
       if (n === 'palm-leaf') this._animRefs.palmLeaves.push(child);
 
-      // NOVOS: Shaders de água e partículas
+      // NOVOS: Shaders de água
       if (n === 'creek-water') {
         if (child.material?.uniforms?.uTime) this._animRefs.creekWaterMats.push(child.material);
       }
-      if (n === 'butterflies') {
-        if (child.material?.uniforms?.uTime) this._animRefs.butterflyMats.push(child.material);
-      }
-      if (n === 'tumbleweeds') {
-        if (child.material?.uniforms?.uTime) this._animRefs.tumbleweedMats.push(child.material);
-      }
       if (n === 'oasis-water') {
         if (child.material?.uniforms?.uTime) this._animRefs.oasisWaterMats.push(child.material);
-      }
-      if (n === 'campfire-particles') {
-        if (child.material?.uniforms?.uTime) this._animRefs.campfireParticleMats.push(child.material);
       }
       if (n === 'campfire-light') this._animRefs.campfireLights.push(child);
       if (n === 'frozen-lake-surface') {
@@ -1220,18 +935,41 @@ export class LevelManager {
   }
 
   _optimizeComplexShadows() {
-    // Decorações do bioma costumam ser o grosso da cena: desliga sombras nelas
-    // (mantém a cobra/board/obstacles com sombras para “look” consistente).
-    this.complexGroup.traverse(obj => {
-      if (obj.isMesh) {
-        obj.castShadow = false;
-        obj.receiveShadow = false;
-      }
-    });
+    // Bioma + GLTF fora do tabuleiro: não projectam nem recebem sombras (reduz draw calls no shadow pass).
+    // Mantém-se sombra principalmente no chão, cobra e comida (boardGroup / scene directa).
+    const strip = (root) => {
+      root.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+        }
+      });
+    };
+    strip(this.complexGroup);
+    strip(this.decorGroup);
   }
 
   get speed() { return this._getDifficultyConfig(this.currentDifficultyId).speed; }
+  /**
+   * Segundos no início da partida em que colisões com paredes móveis não matam (0 em fácil).
+   * @returns {number}
+   */
+  get movingWallGraceSeconds() {
+    const d = this._getDifficultyConfig(this.currentDifficultyId);
+    return typeof d.movingWallGraceSeconds === 'number' ? d.movingWallGraceSeconds : 0;
+  }
   get powerups() { return this._getDifficultyConfig(this.currentDifficultyId).powerups || []; }
+  /**
+   * Intervalo de maçãs (comida) para spawnar escudo; `null` = sem escudos por esta regra.
+   * @returns {number|null}
+   */
+  get shieldEveryApples() {
+    const d = this._getDifficultyConfig(this.currentDifficultyId);
+    const n = d.shieldEveryApples;
+    if (n == null) return null;
+    const v = Math.floor(Number(n));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }
   get biome() { return this.currentLevel ? (this.currentLevel.biome || 'forest') : 'forest'; }
   get difficulties() {
     return Object.values(DIFFICULTY_PRESETS).map(d => ({ id: d.id, name: d.name }));

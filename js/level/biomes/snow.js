@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
 /**
+ * @deprecated O `LevelManager` usa **`js/level/biomes/snow/index.js`**. Este ficheiro é só referência.
+ *
  * BIOMA NEVE
  * --------------------------------------------------------------------------
  * GUIA RÁPIDO PARA A DEFESA:
@@ -17,10 +19,10 @@ import * as THREE from 'three';
  *
  * @param {THREE.Group} complexGroup
  * @param {number} half
- * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function, createParticleSystem: Function, createAuroraBorealis: Function}} helpers
+ * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function, createAuroraBorealis: Function}} helpers
  */
 export function buildSnowBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem, createAuroraBorealis } = helpers;
+  const { loadImportedTexture, createAtmosphericEffect, createAuroraBorealis } = helpers;
 
   // Materiais base do bioma nevado.
   // Ajusta aqui para alterar neve, gelo, troncos e rocha.
@@ -157,6 +159,4 @@ export function buildSnowBiome(complexGroup, half, helpers) {
   complexGroup.add(createAuroraBorealis());
   const fog = createAtmosphericEffect('#667788', '#aabbcc', 0.2, 28, 28);
   fog.position.set(0, 0.5, 0); complexGroup.add(fog);
-  const particles = createParticleSystem('snow', half);
-  complexGroup.add(particles);
 }

@@ -1,119 +1,134 @@
 # Snake Retro 3D — Three.js
 
-Jogo da cobra em 3D com estética retro neon, construído com **Three.js** para a disciplina de **Computação Gráfica**.
+Jogo da cobra em 3D com estética retro neon, em **Three.js**, para **Computação Gráfica**.
 
-## 🎮 Controlos
+## Controlos
 
 | Tecla | Acção |
 |-------|-------|
-| `W` / `↑` | Mover para cima (direcção absoluta) |
-| `S` / `↓` | Mover para baixo (direcção absoluta) |
+| `W` / `↑` | Direcção absoluta: cima |
+| `S` / `↓` | Direcção absoluta: baixo |
 | `A` / `←` | Virar à esquerda (relativo à cobra) |
 | `D` / `→` | Virar à direita (relativo à cobra) |
-| `SPACE` | Pausar / Retomar / Iniciar jogo |
-| `C` | Alternar câmara (Perspectiva ↔ Ortográfica) |
-| `1` | Toggle Ambient Light |
-| `2` | Toggle Directional Light |
-| `3` | Toggle Point Light |
-| `4` | Toggle Hemisphere Light |
-| `R` | Replay (após Game Over) / Reiniciar (durante jogo) |
-| `M` | Toggle Pós-Processamento (CRT + Bloom + Pixelate) |
-| `P` | Toggle Som (mute/unmute) |
-| `B` | Retroceder replay |
-| `N` | Velocidade do replay (0.5x → 1x → 2x → 4x) |
-| 🖱️ Rato | OrbitControls (rotação da câmara) |
+| `Espaço` | Pausar / retomar (jogo) · Iniciar a partir do menu principal · Sair do *game over* para o menu |
+| `Escape` | Fechar sub-menu (níveis/skins/definições) · Abrir/fechar pausa durante o jogo |
+| `C` | Alternar câmara (perspectiva ↔ ortográfica) |
+| `1`–`4` | Alternar luzes: **1** direccional · **2** *spotlight* · **3** *point* (comida) · **4** ambiente |
+| `M` | Alternar pós-processamento (CRT, bloom, etc.) |
+| `P` | Som ligado / mudo |
+| Rato | **OrbitControls** na pausa (rodar a vista). Clique no canvas para focar. |
 
-## 📋 Requisitos Académicos Implementados
+O menu principal e as opções são **HTML/CSS** (botões e listas), não há `Raycaster` sobre malhas 3D para navegação.
 
-### R1 — Objectos 3D Complexos
-- Primitivas: `SphereGeometry`, `BoxGeometry`, `TorusGeometry`, `OctahedronGeometry`, `CylinderGeometry`, `IcosahedronGeometry`
-- Materiais: `MeshStandardMaterial` com texturas Canvas pixel-art, bump maps, emissive
-- `ShaderMaterial` com fresnel para escudo
-- Importação de 2 modelos GLTF via `GLTFLoader` (arcade cabinet + trophy, com fallback procedural)
-- `TextGeometry` para menu 3D
+## Requisitos académicos (resumo honesto)
+
+### R1 — Objectos 3D complexos
+- Primitivas e materiais PBR na cobra, comida e cenário.
+- **Escudo no mapa** (pickup): orbe em `js/food/PowerUps.js` (`MeshStandardMaterial`, icosaedro).
+- **Escudo activo** (à volta da cobra): `ShaderMaterial` com fresnel em `js/snake/Snake.js`.
+- **Modelos GLB** (opcionais): `assets/models/` (`arcade_cabinet.glb`, `trophy.glb`), carregados por `js/ModelLoader.js` com fallback procedural.
+- **Biomas**: objectos temáticos gerados em código sob `js/level/biomes/` (floresta, deserto, neve).
 
 ### R2 — Câmara
-- Toggle suave entre `PerspectiveCamera` e `OrthographicCamera` (tecla C)
-- `OrbitControls` para rotação manual (activo em pausa)
-- Follow-camera com lerp para seguir a cobra
+- `PerspectiveCamera` e `OrthographicCamera` com transição suave (tecla **C**).
+- `OrbitControls` activos na **pausa** para inspecção da cena.
 
 ### R3 — Iluminação (4 tipos)
-- `AmbientLight` (tecla 1)
-- `DirectionalLight` com sombras (tecla 2)
-- `PointLight` segue a comida, pulsa (tecla 3)
-- `HemisphereLight` (tecla 4)
-- Feedback visual na UI para cada luz
+- `DirectionalLight`, `SpotLight`, `PointLight`, `AmbientLight` — ver `js/LightManager.js` e teclas **1–4**.
 
-### R4 — Interação
-- Teclado: WASD/Setas (mover), Espaço (pausar)
-- Rato: OrbitControls para rotação
-- `Raycaster` para menu 3D interactivo (hover + click em objectos 3D)
+### R4 — Interacção
+- Teclado para movimento, pausa e atalhos.
+- Rato: órbita na pausa; UI de jogo em HTML.
 
-### R5 — Animação + Replay
-- Movimento suave com interpolação `lerp`
-- Comida com rotação e pulso
-- Corpo da cobra com ondulação
-- **Sistema de Replay**: buffer circular de 3000 frames, controlos play/pause/rewind/velocidade/timeline
+### R5 — Animação
+- Movimento da cobra com interpolação entre passos (`alpha` no *render*).
+- Animações de pickups, obstáculos dinâmicos e decorações do nível (ver `LevelManager` e biomas).
 
-### Funcionalidades Avançadas
-- **3 Níveis** com temas JSON (Neon City, Cyber Maze, Void Realm)
-- **Power-ups**: Velocidade (estrela dourada), Escudo (fresnel shader), Portal (anéis animados)
-- **Obstáculos dinâmicos**: MovingWall (sin oscilação), DisappearingBlock (fade visibilidade)
-- **Pós-processamento retro**: CRT shader (scanlines, curvatura, aberração cromática), UnrealBloomPass, Pixelate shader, Film grain
-- **Sistema de Som**: Web Audio API com sons sintetizados 8-bit (eat, powerup, death, combo, levelUp) + música chiptune
-- **Efeito de Morte**: Explosão de partículas, camera shake, flash vermelho, delay dramático
-- **Trail Visual**: Rasto luminoso atrás da cobra com fade out
-- **Transição de Câmara**: Interpolação suave (smoothstep) entre perspectiva e ortográfica
-- **Menu 3D** com TextGeometry e Raycaster
-- **Ecrã de carregamento** com barra de progresso
+**Nota:** não há modo *replay* com teclas dedicadas nem buffer de gravação ligado ao *loop* de jogo.
 
-## 🗂️ Estrutura
+## Funcionalidades
+
+- **Níveis** definidos em `levels/levelConfig.json` (três mapas: floresta tropical, deserto *canyon*, montanha de neve).
+- **Dificuldade** (`js/level/difficultyPresets.js`): fácil / médio / difícil (velocidade, obstáculos, graça inicial em paredes móveis, áudio).
+- **Obstáculos dinâmicos** (`js/obstacles/`): paredes móveis, blocos que aparecem/desaparecem; colisão com *sweep* ao longo do passo da cabeça.
+- **Comida e escudo** (`js/food/`): torus da comida; orbe do escudo e spawn probabilístico. Anéis do troféu GLB são só decoração (`trophy-ring` no `LevelManager`), não pickups.
+- **Pós-processamento** (`js/PostProcessing.js`): CRT, bloom, pixelate, *film grain*.
+- **Som** (`js/SoundManager.js`): Web Audio API, SFX sintéticos, *stingers* por obstáculo; **música ambiente** distinta no menu (loop suave) e no jogo (chiptune), com **tempo e tom** ligados à dificuldade (`js/level/difficultyPresets.js`).
+- **Morte**: *shake* da câmara, flash, cobra oculta (`explode()`), atraso antes do ecrã de *game over*.
+
+Para **onde editar** cada coisa (geometria, som, biomas), vê `GUIDE_EDIT.md`.
+
+## Performance
+
+- Procedimento de medição (Chrome DevTools, cenários fixos, **M** = pós-processamento): [`PERF.md`](PERF.md).
+- **FPS baixos:** tenta **M** (desligar pós-processamento); nas **Definições** desliga sombras; em `js/gameConfig.js` reduz `RENDER.internalScale` (ex.: `0.55`) ou `RENDER.maxSnakeStepsPerFrame` (ex.: `3`). *Bloom* / *film grain*: `POST_FX` no mesmo ficheiro.
+
+## Checklist rápido (documentação vs código)
+
+- [ ] GLB só em `assets/models/` + entradas em `ModelLoader.js`
+- [ ] Pickups no mapa = `ITEM_TYPES` / `difficultyPresets.js` (`shield`); torus = comida (`Food.js`)
+- [ ] Bioma activo = `js/level/biomes/<nome>/index.js` (não os `.js` monolíticos na raiz de `biomes/`)
+- [ ] Parâmetros de equilíbrio (FPS, áudio, rio): `js/gameConfig.js`
+- [ ] Tabela de resultados em `PERF.md` actualizada após mudanças visuais pesadas (água, névoa, post-FX)
 
 ```
 computacao_grafica/
-├── index.html              — Página principal + UI HTML
-├── css/style.css           — Tema retro neon
-├── js/
-│   ├── main.js             — Orquestrador principal
-│   ├── Snake.js            — Cobra 3D com texturas, power-ups, trail e explosão
-│   ├── Food.js             — Comida e power-ups 3D
-│   ├── Obstacles.js        — Obstáculos dinâmicos
-│   ├── LevelManager.js     — Sistema de níveis (JSON)
-│   ├── ReplaySystem.js     — Buffer circular + reprodução
-│   ├── CameraController.js — Câmaras + OrbitControls + transição suave
-│   ├── LightManager.js     — 4 tipos de luz + toggle
-│   ├── PostProcessing.js   — CRT + Bloom + Pixelate + Film
-│   ├── SoundManager.js     — Som retro 8-bit (Web Audio API)
-│   ├── UIManager.js        — Gestão da interface
-│   └── utils/helpers.js    — Constantes e utilitários
-├── models/                 — Modelos GLTF (fallback procedural)
-├── textures/               — Texturas (geradas proceduralmente)
+├── index.html
+├── css/style.css
+├── README.md
+├── GUIDE_EDIT.md          — Guia rápido de edição (ficheiros-chave)
+├── PERF.md                — Método e tabela de performance (Chrome)
+├── assets/models/         — GLB opcionais (arcade, troféu); ver ModelLoader.js
+├── textures/              — Texturas PNG usadas no chão / paredes
 ├── levels/
-│   └── levelConfig.json    — Configuração dos 3 níveis
-└── README.md               — Este ficheiro
+│   └── levelConfig.json   — Temas e meta-dados dos 3 níveis
+└── js/
+    ├── main.js            — Arranque, estados, *input*, *game loop*
+    ├── gameConfig.js      — Parâmetros afináveis (render, post-FX, áudio, luz, rio)
+    ├── food.js            — Reexporta js/food/ (compatibilidade de imports)
+    ├── snake.js           — Reexporta js/snake/
+    ├── Obstacles.js       — Orquestra obstáculos; lógica em obstacles/
+    ├── LevelManager.js    — Níveis, tabuleiro, biomas, decorações
+    ├── ModelLoader.js     — GLB de decoração + preparação de materiais
+    ├── CameraController.js
+    ├── LightManager.js
+    ├── PostProcessing.js
+    ├── SoundManager.js
+    ├── UIManager.js
+    ├── food/              — Comida, power-ups, spawn
+    │   ├── index.js       — Classe Food
+    │   ├── Food.js
+    │   ├── PowerUps.js
+    │   ├── SpawnManager.js
+    │   └── constants.js
+    ├── obstacles/         — Obstáculos dinâmicos + áudio de impacto
+    │   ├── MovingObstacles.js
+    │   ├── Walls.js
+    │   ├── config.js
+    │   └── audioTriggers.js
+    ├── snake/             — Cobra, skins, cabeça para pré-visualização
+    ├── level/
+    │   ├── difficultyPresets.js
+    │   └── biomes/        — forest / desert / snow (+ submódulos)
+    └── utils/
+        └── helpers.js
 ```
 
-## 🚀 Como Executar
+**Modelos 3D (GLB):** ficam apenas em **`assets/models/`** e são carregados por **`js/ModelLoader.js`** (único ponto de `GLTFLoader` para decoração). **Não** existe pasta `js/complex-objects/`. O cenário procedural por mapa está em **`js/level/biomes/<nome>/index.js`** (ficheiros `forest.js` / `desert.js` / `snow.js` ao lado são legado `@deprecated`, não usados pelo motor); a cobra em **`js/snake/`**.
 
-O projecto usa Three.js via CDN (sem necessidade de npm/build).
-Necessita de um servidor HTTP local devido aos módulos ES:
+## Como executar
+
+Three.js via **CDN**; sem `npm` obrigatório. Servidor HTTP local por causa dos módulos ES:
 
 ```bash
-# Opção 1: Python
 python -m http.server 8080
-
-# Opção 2: Node.js
-npx serve .
-
-# Opção 3: VS Code
-# Usar extensão "Live Server"
+# ou: npx serve .
 ```
 
-Abrir `http://localhost:8080` no browser.
+Abrir `http://localhost:8080`.
 
-## 🛠️ Tecnologias
+## Tecnologias
 
-- **Three.js r161** — Motor 3D WebGL
-- **GLSL** — Shaders personalizados (CRT, Pixelate, Film, Fresnel)
-- **ES Modules** — Arquitectura modular sem bundler
-- **Canvas API** — Texturas procedurais pixel-art
+- **Three.js** (versão referenciada no `index.html`) — WebGL
+- **GLSL** — shaders de pós-processamento e escudo
+- **ES Modules** — imports relativos entre ficheiros `.js`

@@ -8,8 +8,10 @@
    - Comprimento: length
    - Cor da água: uniforms uColor1/uColor2
    - Velocidade: multiplicador do uTime no shader
+   - Cores / opacidade / sparkle: `js/gameConfig.js` → `FOREST_CREEK` (ou uniforms aqui em baixo)
    ========================================================================== */
 import * as THREE from 'three';
+import { FOREST_CREEK } from '../../../gameConfig.js';
 
 /**
  * Cria um riacho com água animada via shader.
@@ -28,9 +30,10 @@ export function createCreek(x, z, length, width, rotation) {
     transparent: true, side: THREE.DoubleSide, depthWrite: false,
     uniforms: {
       uTime: { value: 0 },
-      uColor1: { value: new THREE.Color('#1a6655') },
-      uColor2: { value: new THREE.Color('#44bbaa') },
-      uOpacity: { value: 0.65 },
+      uColor1: { value: new THREE.Color(FOREST_CREEK.waterColor1) },
+      uColor2: { value: new THREE.Color(FOREST_CREEK.waterColor2) },
+      uOpacity: { value: FOREST_CREEK.waterOpacity },
+      uSparkleIntensity: { value: FOREST_CREEK.sparkleIntensity },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -48,11 +51,12 @@ export function createCreek(x, z, length, width, rotation) {
       uniform vec3 uColor1;
       uniform vec3 uColor2;
       uniform float uOpacity;
+      uniform float uSparkleIntensity;
       varying vec2 vUv;
       void main() {
         float flow = sin(vUv.x * 12.0 + uTime * 3.0) * 0.5 + 0.5;
         flow += sin(vUv.x * 6.0 - uTime * 2.0 + vUv.y * 4.0) * 0.3;
-        float sparkle = pow(sin(vUv.x * 30.0 + uTime * 5.0) * sin(vUv.y * 20.0 + uTime * 3.0), 8.0) * 0.4;
+        float sparkle = pow(sin(vUv.x * 30.0 + uTime * 5.0) * sin(vUv.y * 20.0 + uTime * 3.0), 8.0) * 0.4 * uSparkleIntensity;
         vec3 color = mix(uColor1, uColor2, flow);
         color += vec3(sparkle);
         float edgeFade = smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);

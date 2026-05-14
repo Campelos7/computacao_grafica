@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 
 /**
+ * @deprecated O `LevelManager` importa e usa **`js/level/biomes/forest/index.js`**.
+ * Este ficheiro monolítico mantém-se só como referência; alterações aqui **não** afectam o jogo.
+ *
  * BIOMA FLORESTA
  * --------------------------------------------------------------------------
  * GUIA RÁPIDO PARA A DEFESA (onde mexer):
@@ -19,10 +22,10 @@ import * as THREE from 'three';
  *
  * @param {THREE.Group} complexGroup
  * @param {number} half
- * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function, createParticleSystem: Function}} helpers
+ * @param {{loadImportedTexture: Function, createAtmosphericEffect: Function}} helpers
  */
 export function buildForestBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem } = helpers;
+  const { loadImportedTexture, createAtmosphericEffect } = helpers;
 
   // Materiais base da floresta (casca, folhas, musgo e frutos).
   // Altera aqui para mudar o "look" geral do bioma.
@@ -158,9 +161,7 @@ export function buildForestBiome(complexGroup, half, helpers) {
   [[-m + 1, -2, 1], [m - 1, 3, 1.2], [-5, m - 1, 0.8], [6, -m + 1, 1.1]].forEach(([x, z, s]) => complexGroup.add(createFern(x, z, s)));
   [[-m + 2, 2, 1.3], [m - 1.5, -6, 1], [-4, m - 1, 0.8], [3, -m + 2, 1.1]].forEach(([x, z, s]) => complexGroup.add(createMossyRock(x, z, s)));
 
-  // Atmosfera e partículas do bioma.
+  // Atmosfera do bioma.
   const fog = createAtmosphericEffect('#225533', '#44aa44', 0.2, 28, 28);
   fog.position.set(0, 0.8, 0); complexGroup.add(fog);
-  const particles = createParticleSystem('forest', half);
-  complexGroup.add(particles);
 }

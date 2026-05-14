@@ -47,7 +47,7 @@
         <div><kbd>C</kbd> Câmara</div>
         <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> Luzes</div>
         <div><kbd>M</kbd> Post-FX</div>
-        <div><kbd>P</kbd> Som</div>
+        <div><kbd>P</kbd> Silêncio total (áudio)</div>
         <div>🖱️ OrbitControls</div>
       </div>
     </div>
@@ -61,11 +61,6 @@
       </div>
     </div>
 
-    <!-- COMBO DISPLAY -->
-    <div id="hud-combo" class="hud-combo hidden">
-      <div class="combo-text" id="combo-text">COMBO x2</div>
-      <div class="combo-mult" id="combo-mult">×1.5 PTS</div>
-    </div>
   </div>
 
   <!-- LIGHT STATUS INDICATORS -->
@@ -90,9 +85,13 @@
 
   <!-- PAUSE OVERLAY -->
   <div id="pause-overlay">
-    <div>
+    <div class="pause-inner">
       <div class="pause-text">PAUSED</div>
       <div class="pause-sub">Press SPACE to resume<br>Use mouse to orbit camera</div>
+      <div class="pause-actions">
+        <button type="button" class="menu-btn" id="btn-pause-settings">DEFINIÇÕES</button>
+        <button type="button" class="menu-btn" id="btn-pause-menu">MENU PRINCIPAL</button>
+      </div>
     </div>
   </div>
 
@@ -114,9 +113,9 @@
   <div id="death-flash"></div>
 
   <!-- SOUND INDICATOR -->
-  <div id="hud-sound" title="Toggle Som (P)">🔊</div>
+  <div id="hud-sound" title="Silêncio total (P). Música e efeitos: menu Settings">🔊</div>
 
-  <!-- MENU OVERLAY (3D raycaster passthrough) -->
+  <!-- MENU OVERLAY (bloqueia cliques na cena 3D quando o menu HTML está visível) -->
   <div id="menu-overlay" class="visible"></div>
 
   <!-- ================================================================
@@ -164,24 +163,75 @@
   <!-- ================================================================
          SUB-MENU: SETTINGS
          ================================================================ -->
-  <div id="panel-settings" class="menu-panel">
-    <div class="menu-panel-title">SETTINGS</div>
-    <div class="settings-list">
-      <div class="setting-row">
-        <span class="setting-label">POST-FX</span>
-        <span class="setting-value active" id="setting-postfx">ON</span>
+  <div id="panel-settings" class="menu-panel panel-settings">
+    <div class="settings-frame">
+      <header class="settings-header">
+        <h2 class="settings-title">DEFINIÇÕES</h2>
+        <p class="settings-lead">Áudio, imagem e controlos — guardado neste aparelho</p>
+      </header>
+
+      <div class="settings-scroll">
+        <section class="settings-block" aria-labelledby="settings-audio-h">
+          <h3 id="settings-audio-h" class="settings-block-title">Áudio</h3>
+          <div class="settings-list">
+            <div class="setting-row setting-row-slider">
+              <span class="setting-label">Volume geral</span>
+              <div class="setting-slider-block">
+                <input type="range" class="setting-range" id="vol-master" min="0" max="100" step="1" value="100"
+                  title="Música e efeitos" />
+                <span class="setting-range-pct" id="vol-master-pct">100%</span>
+              </div>
+            </div>
+            <div class="setting-row setting-row-toggle">
+              <span class="setting-label">Música ambiente</span>
+              <span class="setting-value active" id="setting-music" title="Menu + jogo (ritmo no jogo = dificuldade)">ON</span>
+            </div>
+            <div class="setting-row setting-row-slider">
+              <span class="setting-label">Nível da música</span>
+              <div class="setting-slider-block">
+                <input type="range" class="setting-range" id="vol-music" min="0" max="100" step="1" value="100"
+                  title="Volume do loop (com música ligada)" />
+                <span class="setting-range-pct" id="vol-music-pct">100%</span>
+              </div>
+            </div>
+            <div class="setting-row setting-row-toggle">
+              <span class="setting-label">Efeitos e UI</span>
+              <span class="setting-value active" id="setting-sfx" title="Comer, power-up, morte, sons do menu">ON</span>
+            </div>
+            <div class="setting-row setting-row-slider">
+              <span class="setting-label">Nível dos efeitos</span>
+              <div class="setting-slider-block">
+                <input type="range" class="setting-range" id="vol-sfx" min="0" max="100" step="1" value="100"
+                  title="Volume dos efeitos (com efeitos ligados)" />
+                <span class="setting-range-pct" id="vol-sfx-pct">100%</span>
+              </div>
+            </div>
+            <p class="settings-hint">Tecla <kbd class="settings-kbd">P</kbd> — silêncio total até voltares a premir <kbd class="settings-kbd">P</kbd> (os sliders mantêm-se).</p>
+          </div>
+        </section>
+
+        <section class="settings-block" aria-labelledby="settings-gfx-h">
+          <h3 id="settings-gfx-h" class="settings-block-title">Imagem</h3>
+          <div class="settings-list settings-list-tight">
+            <div class="setting-row setting-row-toggle">
+              <span class="setting-label">Post-processing</span>
+              <span class="setting-value active" id="setting-postfx">ON</span>
+            </div>
+            <div class="setting-row setting-row-toggle">
+              <span class="setting-label">Sombras</span>
+              <span class="setting-value active" id="setting-shadows">ON</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-block settings-block--muted" aria-labelledby="settings-help-h">
+          <h3 id="settings-help-h" class="settings-block-title">Controlos</h3>
+          <p class="settings-hint settings-hint--block">WASD ou setas para mover · rato na câmara (pausa) · <kbd class="settings-kbd">C</kbd> câmara · <kbd class="settings-kbd">M</kbd> post-FX no jogo</p>
+        </section>
       </div>
-      <div class="setting-row">
-        <span class="setting-label">SHADOWS</span>
-        <span class="setting-value active" id="setting-shadows">ON</span>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">CONTROLS</span>
-        <span class="setting-value" style="cursor:default;border:none;font-size:7px;color:rgba(200,200,255,0.5)">WASD /
-          Arrows + Mouse</span>
-      </div>
+
+      <button type="button" class="menu-panel-back menu-panel-back--settings" id="btn-back-settings">← Voltar</button>
     </div>
-    <button class="menu-panel-back" id="btn-back-settings">← BACK</button>
   </div>
 
   <!-- MAIN SCRIPT -->

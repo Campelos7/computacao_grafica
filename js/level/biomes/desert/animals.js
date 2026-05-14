@@ -1,9 +1,8 @@
 /* ==========================================================================
-   DESERTO — Animais e Tumbleweed (NOVO)
+   DESERTO — Animais
    --------------------------------------------------------------------------
    GUIA DE EDIÇÃO:
    - Escorpião: tamanho dos segmentos do corpo/cauda
-   - Tumbleweed: são partículas shader que rolam com o vento
    ========================================================================== */
 import * as THREE from 'three';
 
@@ -63,69 +62,5 @@ export function createScorpion(x, z, scale) {
   }
 
   g.rotation.y = Math.random() * Math.PI * 2;
-  g.position.set(x, 0, z); return g;
-}
-
-/** Tumbleweed — partículas shader que rolam pelo deserto */
-export function createTumbleweeds(x, z, count, half) {
-  const g = new THREE.Group(); g.name = 'desert-tumbleweeds';
-
-  const positions = new Float32Array(count * 3);
-  const phases = new Float32Array(count);
-  const speeds = new Float32Array(count);
-
-  for (let i = 0; i < count; i++) {
-    positions[i * 3]     = (Math.random() - 0.5) * half * 2.5;
-    positions[i * 3 + 1] = 0.08 + Math.random() * 0.1;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * half * 2.5;
-    phases[i] = Math.random() * Math.PI * 2;
-    speeds[i] = 0.8 + Math.random() * 1.5;
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-  geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-
-  const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color('#8a7a50') },
-      uBounds: { value: half * 1.5 },
-    },
-    vertexShader: `
-      attribute float aPhase; attribute float aSpeed;
-      uniform float uTime; uniform float uBounds;
-      varying float vAlpha;
-      void main() {
-        vec3 pos = position;
-        pos.x += uTime * aSpeed * 0.5;
-        pos.x = mod(pos.x + uBounds, uBounds * 2.0) - uBounds;
-        pos.y += abs(sin(uTime * 2.0 + aPhase)) * 0.15;
-        pos.z += sin(uTime * 0.5 + aPhase) * 0.3;
-        vAlpha = 0.5 + sin(aPhase) * 0.2;
-        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = (4.0 + sin(aPhase) * 1.5) * (150.0 / -mvPos.z);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor; varying float vAlpha;
-      void main() {
-        float d = length(gl_PointCoord - vec2(0.5));
-        if (d > 0.5) discard;
-        // Wireframe / tumbleweed look
-        float ring = abs(sin(d * 20.0)) * 0.4 + 0.6;
-        float alpha = (1.0 - d * 2.0) * vAlpha * ring;
-        gl_FragColor = vec4(uColor, alpha);
-      }
-    `,
-  });
-
-  const points = new THREE.Points(geo, mat);
-  points.name = 'tumbleweeds';
-  g.add(points);
-
   g.position.set(x, 0, z); return g;
 }

@@ -28,7 +28,7 @@ import { createPenguin, createCampfire } from './animals.js';
 import { createSnowExterior } from './exterior.js';
 
 export function buildSnowBiome(complexGroup, half, helpers) {
-  const { loadImportedTexture, createAtmosphericEffect, createParticleSystem, createAuroraBorealis } = helpers;
+  const { loadImportedTexture, createAtmosphericEffect, createAuroraBorealis } = helpers;
   const mats = createSnowMaterials(loadImportedTexture);
 
   const m  = half + 1.5;
@@ -190,11 +190,10 @@ export function buildSnowBiome(complexGroup, half, helpers) {
   complexGroup.add(createCampfire(m2 + 1.5, m2 - 0.5, 1.5, mats));
 
   /* ================================================================
-     ATMOSFERA E PARTÍCULAS
+     ATMOSFERA
      ================================================================ */
   complexGroup.add(createAuroraBorealis());
   const fog = createAtmosphericEffect('#667788', '#aabbcc', 0.2, 28, 28);
   fog.position.set(0, 0.5, 0);
   complexGroup.add(fog);
-  complexGroup.add(createParticleSystem('snow', half));
 }
