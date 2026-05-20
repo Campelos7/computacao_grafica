@@ -25,7 +25,6 @@ import { createTree } from './trees.js';
 import { createMushroom } from './mushrooms.js';
 import { createFern, createBush, createFlowerPatch } from './vegetation.js';
 import { createMossyRock, createFallenLog, createTreeStump } from './rocks.js';
-import { createCreek } from './creek.js';
 import { createRabbit } from './animals.js';
 import { createForestExterior } from './exterior.js';
 
@@ -187,11 +186,6 @@ export function buildForestBiome(complexGroup, half, helpers) {
   for (const [x, z, s] of stumpSpawns) {
     complexGroup.add(createTreeStump(x, z, s, mats));
   }
-
-  /* ================================================================
-     RIACHO — Água animada no exterior
-     ================================================================ */
-  complexGroup.add(createCreek(-m2 + 3, 0, 10, 0.8, 0.3));
 
   /* ================================================================
      ANIMAL: COELHOS — FORA da arena, espalhados pelo cenário

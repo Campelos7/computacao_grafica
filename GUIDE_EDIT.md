@@ -71,7 +71,7 @@ Este ficheiro substitui referências desactualizadas (ex.: obstáculos só em `O
 
 ## Performance, GPU, floresta e rio
 
-- **Medição reprodutível:** vê [`PERF.md`](PERF.md) (cenários A/B/C, Chrome Performance, **M** = pós-processamento on/off).
+- **Medição reprodutível:** vê [`PERF.md`](PERF.md) (cenários A/B/C, Chrome Performance, **P** = pós-processamento on/off).
 - **Resolução de render, sombras do renderer, passos da cobra:** `js/gameConfig.js` → `RENDER` (`internalScale`, `shadowMapMode`, `maxSnakeStepsPerFrame`). `main.js` importa estes valores.
 - **Film grain / bloom / CRT:** `js/gameConfig.js` → `POST_FX` (o `main.js` não contém estes números).
 - **Sombras no bioma decorativo:** após construir o nível, `LevelManager._optimizeComplexShadows()` desactiva `castShadow` / `receiveShadow` em **todo** o `complexGroup` e `decorGroup` (cenário exterior + GLB). **Intencional:** menos trabalho no *shadow pass*; sombras ficam sobretudo no tabuleiro / entidades de jogo.

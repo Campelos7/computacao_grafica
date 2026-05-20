@@ -3,7 +3,7 @@
    Parâmetros afináveis (bloom, CRT, film grain): `js/gameConfig.js` → `POST_FX`.
    Requisito: EffectComposer pipeline com RenderPass, CRT Shader (scanlines,
    curvatura, aberração cromática), UnrealBloomPass, Pixelate Shader, FilmPass.
-   Toggle completo com tecla M.
+   Toggle completo com tecla P.
    ========================================================================== */
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -263,7 +263,7 @@ export class PostProcessing {
   }
 
   /**
-   * Requisito: Toggle completo com tecla M.
+   * Requisito: Toggle completo com tecla P.
    */
   toggle() {
     this.enabled = !this.enabled;

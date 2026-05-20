@@ -20,7 +20,7 @@ Relatório curto para substituir percepção subjectiva por um procedimento fixo
 2. Chrome: **F12** → separador **Performance** → opções de gravação: activar **Screenshots** só se precisares; o importante é o gráfico de **Frames**.
 3. Opcional: **Ctrl+Shift+P** → “Show frames per second (FPS) meter” (ou *Rendering* → *Frame Rendering Stats*) para leitura directa no ecrã.
 4. Gravar **12 s** estáveis (botão Record → esperar → Stop). Anotar **FPS médio** a olho no painel ou **Frame time** médio (ms) na faixa principal.
-5. Repetir o **mesmo** cenário com **pós-processamento desligado** (tecla **M** no jogo) e outra vez **ligado**, sem mudar mais nada.
+5. Repetir o **mesmo** cenário com **pós-processamento desligado** (tecla **P** no jogo) e outra vez **ligado**, sem mudar mais nada.
 
 ## Cenários fixos (3)
 

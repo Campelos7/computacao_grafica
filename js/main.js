@@ -570,14 +570,14 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit3') { lightMgr.toggle(2); ui.showNotification('POINT LIGHT', 'default'); }
   if (e.code === 'Digit4') { lightMgr.toggle(3); ui.showNotification('AMBIENT LIGHT', 'default'); }
 
-  // Som (P)
-  if (e.code === 'KeyP') {
+  // Som (M)
+  if (e.code === 'KeyM') {
     const muted = sound.toggleMute();
     if (hudSound) {
       hudSound.textContent = muted ? '🔇' : '🔊';
       hudSound.classList.toggle('muted', muted);
     }
-    ui.showNotification(`ÁUDIO (P): ${muted ? 'OFF' : 'ON'}`, 'default');
+    ui.showNotification(`ÁUDIO (M): ${muted ? 'OFF' : 'ON'}`, 'default');
   }
 
   // Espaço
@@ -603,8 +603,8 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
-  // Post-Processing (M)
-  if (e.code === 'KeyM') {
+  // Post-Processing (P)
+  if (e.code === 'KeyP') {
     const ppOn = postProc.toggle();
     ui.showNotification(`POST-FX: ${ppOn ? 'ON' : 'OFF'}`, 'default');
     ui.updateSettingToggle('setting-postfx', ppOn);

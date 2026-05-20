@@ -60,8 +60,8 @@ Para **onde editar** cada coisa (geometria, som, biomas), vê `GUIDE_EDIT.md`.
 
 ## Performance
 
-- Procedimento de medição (Chrome DevTools, cenários fixos, **M** = pós-processamento): [`PERF.md`](PERF.md).
-- **FPS baixos:** tenta **M** (desligar pós-processamento); nas **Definições** desliga sombras; em `js/gameConfig.js` reduz `RENDER.internalScale` (ex.: `0.55`) ou `RENDER.maxSnakeStepsPerFrame` (ex.: `3`). *Bloom* / *film grain*: `POST_FX` no mesmo ficheiro.
+- Procedimento de medição (Chrome DevTools, cenários fixos, **P** = pós-processamento): [`PERF.md`](PERF.md).
+- **FPS baixos:** tenta **P** (desligar pós-processamento); nas **Definições** desliga sombras; em `js/gameConfig.js` reduz `RENDER.internalScale` (ex.: `0.55`) ou `RENDER.maxSnakeStepsPerFrame` (ex.: `3`). *Bloom* / *film grain*: `POST_FX` no mesmo ficheiro.
 
 ## Checklist rápido (documentação vs código)
 

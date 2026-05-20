@@ -6,7 +6,7 @@
    o tempo e o tom seguem o preset de dificuldade (`musicNoteLength`, `musicPitchMultiplier`).
    Ganhos e ritmo do menu: `js/gameConfig.js` (`AUDIO_BUS`, `AMBIENT_MENU_MUSIC`).
    O `AudioContext` começa `suspended`: `main.js` chama `unlockFromUserGesture()` no início de `startGame()` e `ensureAudioResumeOnFirstGesture()` após o menu carregar; `_ensureContext()` também tenta `resume()` ao criar/reusar o contexto.
-   Tecla **P**: silêncio total (master). Volumes e ON/OFF em Settings (`localStorage` snake3d_vol_* / snake3d_setting_*).
+   Tecla **M**: silêncio total (master). Volumes e ON/OFF em Settings (`localStorage` snake3d_vol_* / snake3d_setting_*).
    ========================================================================== */
 
 import { getDifficultyAudioPreset } from './level/difficultyPresets.js';
