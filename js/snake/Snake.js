@@ -47,6 +47,7 @@ import { SHIELD } from '../gameConfig.js';
 // - Espessura do escudo: SHIELD_RADIUS
 // - Duração do escudo activo (HUD): `SHIELD.durationSec` em `gameConfig.js`
 // ============================================================================
+//tamanho da cabeça 
 const SNAKE_HEAD_RADIUS = 0.46;
 const SNAKE_BODY_SIZE = { x: 0.7, y: 0.55, z: 0.78 };
 const SNAKE_RENDER_Y = 0.38;

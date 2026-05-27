@@ -65,6 +65,7 @@ export function createOasis(x, z, scale, mats) {
   const g = new THREE.Group(); g.name = 'desert-oasis';
 
   /* ── Lago (shader de água animada) ── */
+  //Mudar a cor da agua, alterar a linha 
   const waterMat = new THREE.ShaderMaterial({
     transparent: true, side: THREE.DoubleSide, depthWrite: false,
     uniforms: {
@@ -104,6 +105,7 @@ export function createOasis(x, z, scale, mats) {
   bank.rotation.x = -Math.PI / 2; bank.position.y = 0.01; g.add(bank);
 
   /* ── Palmeiras à volta ── */
+  //adicionar mais entradas ao array palmPositions (cada uma é [x, z, escala]
   const palmPositions = [
     [-0.8, -0.6, 0.9], [0.9, -0.3, 0.8], [-0.3, 0.9, 1.0], [0.5, 0.7, 0.75],
   ];

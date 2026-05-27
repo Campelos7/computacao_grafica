@@ -61,6 +61,8 @@ export function attachDragonHeadDetails(headMesh, skin) {
   });
 
   // Focinho do dragão
+
+  //// Aumentar o comprimento Z de 0.48 para 0.85 para aumentar o focinho:
   const snout = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.20, 0.48), headMesh.material);
   snout.position.set(0, -0.03, -0.43);
   const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.09, 0.36), headMesh.material);
@@ -78,6 +80,12 @@ export function attachDragonHeadDetails(headMesh, skin) {
   const nostrilR = mkNostril(0.10);
 
   // Presas
+
+  // presas do dragão mais compridas e afiadas
+  // // De: (raio 0.022, altura 0.115)
+  //const fangGeo = new THREE.ConeGeometry(0.022, 0.115, 6);
+  // Para: (raio 0.015, altura 0.25)
+  //const fangGeo = new THREE.ConeGeometry(0.015, 0.25, 6);
   const fangGeo = new THREE.ConeGeometry(0.022, 0.115, 6);
   const mkFang = (x) => {
     const m = new THREE.Mesh(fangGeo, fangMat);
@@ -113,7 +121,10 @@ export function attachDragonHeadDetails(headMesh, skin) {
   const browL = mkBrow(-0.20, 0.32);
   const browR = mkBrow(0.20, -0.32);
 
+  //chifres
   const mkHorn = (x, sign) => {
+
+    //const hornColor = skin.hornColor || 0xffcc00; // Vem das configurações do jogo
     const pieces = [];
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.055, 0.22, 8), hornMat);
     base.position.set(x, 0.315, -0.04);
@@ -173,6 +184,10 @@ export function attachDragonBodyDetails(bodyMesh, skin) {
     roughness: 0.75, metalness: 0.0,
   });
 
+
+  //Para os meter mais altos: Aumente os valores de h (ex: de 0.26 para 0.60).
+  //Para adicionar mais um espinho: Adicione mais um objeto ao array (ex: { z: 0.35, r: 0.040, h: 0.15 }).
+
   [{ z: -0.24, r: 0.050, h: 0.20 }, { z: 0.00, r: 0.065, h: 0.26 }, { z: 0.24, r: 0.050, h: 0.20 }]
     .forEach((s) => {
       const spine = new THREE.Mesh(new THREE.ConeGeometry(s.r, s.h, 4), spineMat);
@@ -201,7 +216,9 @@ export function createDragonTailGroup(skin) {
     color: spineColor, emissive: spineColor, emissiveIntensity: 0.70,
     roughness: 0.30, metalness: 0.90,
   });
-
+  // cauda duas vezes maior
+  //// raio para 0.16 e altura para 1.04):
+  //const centralSpine = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.04, 4), spineMat);
   const centralSpine = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.52, 4), spineMat);
   centralSpine.position.set(0, 0.38, 0.40);
   centralSpine.rotation.x = -(Math.PI / 2) + 0.18;

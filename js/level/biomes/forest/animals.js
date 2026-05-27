@@ -15,7 +15,8 @@ import * as THREE from 'three';
  * @param {number} z — posição Z
  * @param {number} scale — escala
  */
-export function createRabbit(x, z, scale) {
+export function createRabbit(x, z,scale) {
+  scale=scale*0.25 
   const g = new THREE.Group();
   g.name = 'forest-rabbit';
 

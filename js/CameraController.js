@@ -70,7 +70,7 @@ export class CameraController {
     /* ── Vectores de trabalho (evita alocações por frame) ── */
     this._followBehind = new THREE.Vector3();
     this._followTarget = new THREE.Vector3();
-    this._followPos    = new THREE.Vector3();
+    this._followPos = new THREE.Vector3();
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -213,9 +213,9 @@ export class CameraController {
     this.perspective.aspect = aspect;
     this.perspective.updateProjectionMatrix();
 
-    this.ortho.left   = -this.orthoFrustum * aspect;
-    this.ortho.right  =  this.orthoFrustum * aspect;
-    this.ortho.top    =  this.orthoFrustum;
+    this.ortho.left = -this.orthoFrustum * aspect;
+    this.ortho.right = this.orthoFrustum * aspect;
+    this.ortho.top = this.orthoFrustum;
     this.ortho.bottom = -this.orthoFrustum;
     this.ortho.updateProjectionMatrix();
   }

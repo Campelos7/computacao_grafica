@@ -9,6 +9,8 @@ import * as THREE from 'three';
 
 /** Pinguim low-poly */
 export function createPenguin(x, z, scale) {
+  scale=scale*0.40 
+  x=x+4
   const g = new THREE.Group(); g.name = 'snow-penguin';
 
   const blackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 });

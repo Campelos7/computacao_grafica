@@ -56,11 +56,12 @@ export function createFrozenLake(x, z, radius, mats) {
 
 /** Igloo */
 export function createIgloo(x, z, scale, mats) {
+  x = x + 5
   const g = new THREE.Group(); g.name = 'snow-igloo';
 
   /* ── Domo principal (meia esfera) ── */
   const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(0.5 * scale, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mats.snow);
+    new THREE.SphereGeometry(1 * scale, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mats.snow);
   dome.position.y = 0; dome.castShadow = true; g.add(dome);
 
   /* ── Linhas de blocos (anéis horizontais) ── */

@@ -33,6 +33,7 @@ export function createMushroom(x, z, scale) {
   });
   const glowMat = new THREE.MeshStandardMaterial({
     color: 0x44ff88, emissive: 0x22ff66,
+    //brilho dos pontos do cogumelo mais forte aumentar emissiveIntensity de 1.2 para 3.0.
     emissiveIntensity: 1.2, roughness: 0.3,
     transparent: true, opacity: 0.7,
   });
@@ -55,6 +56,7 @@ export function createMushroom(x, z, scale) {
   g.add(cap);
 
   /* ── Pontos brilhantes (bioluminescência) ── */
+  //Para aumentar a quantidade de pontos, mudar para 10
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2;
     const dot = new THREE.Mesh(

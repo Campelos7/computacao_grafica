@@ -33,7 +33,7 @@ export function buildForestBiome(complexGroup, half, helpers) {
   const mats = createForestMaterials(loadImportedTexture);
 
   // Zonas exteriores — quanto maior, mais longe das paredes
-  const m  = half + 1.5;   // perto das paredes
+  const m = half + 1.5;   // perto das paredes
   const m2 = half + 3.5;   // zona média
   const m3 = half + 6;     // zona afastada
 
@@ -48,32 +48,32 @@ export function buildForestBiome(complexGroup, half, helpers) {
      ================================================================ */
   const treeSpawns = [
     // Anel perto (m)
-    [-m,       -m,       1.0,  true],
-    [-m,       m - 2,    0.9,  false],
-    [m,        -m + 1,   1.1,  true],
-    [m,        m,        0.85, false],
-    [-m,       0,        0.95, true],
-    [m,        0,        1.05, false],
+    [-m, -m, 1.0, true],
+    [-m, m - 2, 0.9, false],
+    [m, -m + 1, 1.1, true],
+    [m, m, 0.85, false],
+    [-m, 0, 0.95, true],
+    [m, 0, 1.05, false],
     // Anel médio (m2) — mais árvores
-    [-m2,      -m2,      1.2,  false],
-    [m2,       -m2,      1.0,  true],
-    [-m2,      m2,       1.1,  true],
-    [m2,       m2,       0.95, false],
-    [-m2,      -3,       0.9,  true],
-    [m2,       4,        1.0,  false],
-    [0,        -m2,      0.85, true],
-    [0,        m2,       0.95, false],
-    [-m2 + 2,  m2,       0.8,  true],
-    [m2 - 2,   -m2,      0.75, false],
+    [-m2, -m2, 1.2, false],
+    [m2, -m2, 1.0, true],
+    [-m2, m2, 1.1, true],
+    [m2, m2, 0.95, false],
+    [-m2, -3, 0.9, true],
+    [m2, 4, 1.0, false],
+    [0, -m2, 0.85, true],
+    [0, m2, 0.95, false],
+    [-m2 + 2, m2, 0.8, true],
+    [m2 - 2, -m2, 0.75, false],
     // Anel longe (m3) — árvores grandes
-    [-m3,      -m3,      1.3,  true],
-    [m3,       -m3,      1.2,  false],
-    [-m3,      m3,       1.1,  true],
-    [m3,       m3,       1.25, false],
-    [-m3,      0,        1.15, true],
-    [m3,       0,        1.0,  false],
-    [0,        -m3,      1.1,  true],
-    [0,        m3,       0.95, false],
+    [-m3, -m3, 1.3, true],
+    [m3, -m3, 1.2, false],
+    [-m3, m3, 1.1, true],
+    [m3, m3, 1.25, false],
+    [-m3, 0, 1.15, true],
+    [m3, 0, 1.0, false],
+    [0, -m3, 1.1, true],
+    [0, m3, 0.95, false],
   ];
   for (const [x, z, s, v] of treeSpawns) {
     complexGroup.add(createTree(x, z, s, v, mats));
@@ -84,14 +84,14 @@ export function buildForestBiome(complexGroup, half, helpers) {
      [x, z, escala]
      ================================================================ */
   const mushroomSpawns = [
-    [-m + 1,  -m + 1,  1.2],
-    [m - 1,   m - 1,   1.0],
-    [-m2,     -3,      0.9],
-    [m2 - 1,  5,       1.1],
-    [-m + 1,  4,       0.9],
+    [-m + 1, -m + 1, 1.2],
+    [m - 1, m - 1, 1.0],
+    [-m2, -3, 0.9],
+    [m2 - 1, 5, 1.1],
+    [-m + 1, 4, 0.9],
     [-m2 + 2, -m2 + 1, 1.3],
-    [m2 - 2,  m2 - 1,  0.8],
-    [3,       -m2,     1.0],
+    [m2 - 2, m2 - 1, 0.8],
+    [3, -m2, 1.0],
   ];
   for (const [x, z, s] of mushroomSpawns) {
     complexGroup.add(createMushroom(x, z, s));
@@ -100,20 +100,20 @@ export function buildForestBiome(complexGroup, half, helpers) {
   /* ================================================================
      TRONCOS CAÍDOS
      ================================================================ */
-  complexGroup.add(createFallenLog(-m2 + 1, -4,  0.3,  mats));
-  complexGroup.add(createFallenLog(m2 - 2,  5,   -0.5, mats));
-  complexGroup.add(createFallenLog(-m,       m2 - 1, 0.8, mats));
+  complexGroup.add(createFallenLog(-m2 + 1, -4, 0.3, mats));
+  complexGroup.add(createFallenLog(m2 - 2, 5, -0.5, mats));
+  complexGroup.add(createFallenLog(-m, m2 - 1, 0.8, mats));
 
   /* ================================================================
      FETOS — Plantas baixas
      ================================================================ */
   const fernSpawns = [
-    [-m + 1, -2,     1.0],
-    [m - 1,  3,      1.2],
-    [-5,     m,      0.8],
-    [6,      -m,     1.1],
-    [-m2,    -m + 1, 0.9],
-    [m2,     m - 1,  1.0],
+    [-m + 1, -2, 1.0],
+    [m - 1, 3, 1.2],
+    [-5, m, 0.8],
+    [6, -m, 1.1],
+    [-m2, -m + 1, 0.9],
+    [m2, m - 1, 1.0],
   ];
   for (const [x, z, s] of fernSpawns) {
     complexGroup.add(createFern(x, z, s, mats));
@@ -123,14 +123,14 @@ export function buildForestBiome(complexGroup, half, helpers) {
      ROCHAS COM MUSGO — Mais pedras no exterior
      ================================================================ */
   const rockSpawns = [
-    [-m + 1,  2,       1.3],
-    [m,       -6,      1.0],
-    [-4,      m,       0.8],
-    [3,       -m,      1.1],
-    [-m2,     -m2 + 2, 1.0],
-    [m2,      m2 - 2,  0.9],
-    [-m2 + 3, 0,       1.2],
-    [m2 - 3,  -4,      0.85],
+    [-m + 1, 2, 1.3],
+    [m, -6, 1.0],
+    [-4, m, 0.8],
+    [3, -m, 1.1],
+    [-m2, -m2 + 2, 1.0],
+    [m2, m2 - 2, 0.9],
+    [-m2 + 3, 0, 1.2],
+    [m2 - 3, -4, 0.85],
   ];
   for (const [x, z, s] of rockSpawns) {
     complexGroup.add(createMossyRock(x, z, s, mats));
@@ -140,16 +140,16 @@ export function buildForestBiome(complexGroup, half, helpers) {
      ARBUSTOS — Vegetação densa no exterior
      ================================================================ */
   const bushSpawns = [
-    [-m,       -m + 2,  1.0],
-    [m - 1,    m,       0.9],
-    [-m2 + 1,  3,       1.1],
-    [m2 - 1,   -3,      0.85],
-    [-2,       m,       0.95],
-    [4,        -m,      1.0],
-    [-m2,      m2 - 2,  1.1],
-    [m2,       -m2 + 2, 0.9],
-    [-m + 2,   -m2,     0.8],
-    [m - 2,    m2,      1.0],
+    [-m, -m + 2, 1.0],
+    [m - 1, m, 0.9],
+    [-m2 + 1, 3, 1.1],
+    [m2 - 1, -3, 0.85],
+    [-2, m, 0.95],
+    [4, -m, 1.0],
+    [-m2, m2 - 2, 1.1],
+    [m2, -m2 + 2, 0.9],
+    [-m + 2, -m2, 0.8],
+    [m - 2, m2, 1.0],
   ];
   for (const [x, z, s] of bushSpawns) {
     complexGroup.add(createBush(x, z, s, mats));
@@ -159,16 +159,16 @@ export function buildForestBiome(complexGroup, half, helpers) {
      FLORES — Grupos coloridos
      ================================================================ */
   const flowerSpawns = [
-    [-m + 1,  -2,     1.2],
-    [m - 1,   1,      1.0],
-    [-1,      -m,     0.9],
-    [3,       m,      1.1],
-    [-m2 + 1, -5,     0.8],
-    [m2 - 1,  -m + 1, 1.0],
-    [-5,      m2 - 2, 0.9],
-    [6,       -m2 + 1,0.85],
-    [-m2,     3,      1.0],
-    [m2,      -4,     0.9],
+    [-m + 1, -2, 1.2],
+    [m - 1, 1, 1.0],
+    [-1, -m, 0.9],
+    [3, m, 1.1],
+    [-m2 + 1, -5, 0.8],
+    [m2 - 1, -m + 1, 1.0],
+    [-5, m2 - 2, 0.9],
+    [6, -m2 + 1, 0.85],
+    [-m2, 3, 1.0],
+    [m2, -4, 0.9],
   ];
   for (const [x, z, s] of flowerSpawns) {
     complexGroup.add(createFlowerPatch(x, z, s));
@@ -178,10 +178,10 @@ export function buildForestBiome(complexGroup, half, helpers) {
      TOCOS DE ÁRVORE
      ================================================================ */
   const stumpSpawns = [
-    [-m2 + 2, -5,     1.0],
-    [m2 - 2,  6,      0.9],
-    [0,       -m2,    0.8],
-    [-m,      m2 - 1, 1.1],
+    [-m2 + 2, -5, 1.0],
+    [m2 - 2, 6, 0.9],
+    [0, -m2, 0.8],
+    [-m, m2 - 1, 1.1],
   ];
   for (const [x, z, s] of stumpSpawns) {
     complexGroup.add(createTreeStump(x, z, s, mats));
@@ -193,9 +193,9 @@ export function buildForestBiome(complexGroup, half, helpers) {
      (zonas diagonais e meias-laterais livres)
      ================================================================ */
   const rabbitSpawns = [
-    [-m3 + 3,  -m + 1,    15],   // sudoeste, entre árvores
-    [m2 + 2,   -m3 + 2,   15],   // nordeste, zona isolada
-    [-m - 3,   m3 - 3,    15],   // noroeste, zona livre
+    [-m3 + 3, -m + 1, 15],   // sudoeste, entre árvores
+    [m2 + 2, -m3 + 2, 15],   // nordeste, zona isolada
+    [-m - 3, m3 - 3, 15],   // noroeste, zona livre
   ];
   for (const [rx, rz, rs] of rabbitSpawns) {
     // Pedestal de musgo sob o coelho

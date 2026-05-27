@@ -26,6 +26,7 @@ export function createTree(x, z, scale, variant, mats) {
 
   /* ── Tronco ── */
   const trunk = new THREE.Mesh(
+    // árvore mais alta mudar 2.8 para (5.0 * scale), e ajustar trunk.position.y para metade desse valor
     new THREE.CylinderGeometry(0.12 * scale, 0.22 * scale, 2.8 * scale, 8),
     mats.trunk
   );
@@ -55,14 +56,15 @@ export function createTree(x, z, scale, variant, mats) {
 
   /* ── Copa (esferas sobrepostas) ── */
   // Cada entrada: [offsetX, offsetY, offsetZ, raio]
+  // parâmetro booleano variant alterna entre mats.darkLeaf e mats.leaf para o material das folhas.
   const mat = variant ? mats.darkLeaf : mats.leaf;
   const canopyPositions = [
-    [0,     3.0,  0,     0.85],
-    [-0.35, 3.3,  0.25,  0.55],
-    [0.4,   3.15, -0.2,  0.6],
-    [-0.15, 3.5,  -0.35, 0.45],
-    [0.25,  3.45, 0.35,  0.5],
-    [0,     3.7,  0,     0.35],
+    [0, 3.0, 0, 0.85],
+    [-0.35, 3.3, 0.25, 0.55],
+    [0.4, 3.15, -0.2, 0.6],
+    [-0.15, 3.5, -0.35, 0.45],
+    [0.25, 3.45, 0.35, 0.5],
+    [0, 3.7, 0, 0.35],
   ];
   for (const [lx, ly, lz, lr] of canopyPositions) {
     const leaf = new THREE.Mesh(
@@ -76,6 +78,7 @@ export function createTree(x, z, scale, variant, mats) {
   }
 
   /* ── Frutos (pequenas esferas vermelhas na copa) ── */
+  // mudar 3 para 10, a árvore fica cheia de frutos
   for (let i = 0; i < 3; i++) {
     const fruit = new THREE.Mesh(
       new THREE.SphereGeometry(0.05 * scale, 6, 5),

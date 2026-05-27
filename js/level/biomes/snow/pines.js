@@ -17,6 +17,7 @@ export function createPine(x, z, scale, mats) {
   trunk.position.y = 1.0 * scale; trunk.castShadow = true; g.add(trunk);
 
   /* ── Camadas da copa (cone + neve no topo) ── */
+  // mais camadas ao pinheiro
   const layers = [
     { y: 1.8, r: 0.9, h: 1.0 },
     { y: 2.4, r: 0.7, h: 0.8 },

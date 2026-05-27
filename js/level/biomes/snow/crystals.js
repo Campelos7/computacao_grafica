@@ -12,6 +12,7 @@ export function createIceCrystal(x, z, scale, mats) {
   const g = new THREE.Group(); g.name = 'snow-crystal';
 
   /* ── Cristal principal ── */
+  //altera o tamanho do cristal aumentar o 0.8 * scale para 2 * scale.
   const crystal = new THREE.Mesh(
     new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.8 * scale, 6), mats.ice);
   crystal.position.y = 0.4 * scale; crystal.castShadow = true; g.add(crystal);

@@ -8,6 +8,7 @@ import * as THREE from 'three';
 
 /** Escorpião low-poly */
 export function createScorpion(x, z, scale) {
+  scale = scale * 0.40
   const g = new THREE.Group(); g.name = 'desert-scorpion';
   const bodyMat = new THREE.MeshStandardMaterial({
     color: 0x4a3020, emissive: 0x1a1008, emissiveIntensity: 0.1, roughness: 0.8,
@@ -21,6 +22,9 @@ export function createScorpion(x, z, scale) {
   body.position.y = 0.04 * scale; body.scale.set(1, 0.5, 1.4); g.add(body);
 
   // Cauda (segmentos curvos para cima)
+  //Como é construída a cauda curva do escorpião
+  // um loop de 4 segmentos (SphereGeometry) que vão ficando mais pequenos (1 - i * 0.1) e 
+  // subindo progressivamente (tailY += 0.03), simulando a curvatura da cauda.
   let tailY = 0.06 * scale, tailZ = 0.1 * scale;
   for (let i = 0; i < 4; i++) {
     const seg = new THREE.Mesh(

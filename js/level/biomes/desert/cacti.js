@@ -12,6 +12,7 @@ export function createCactus(x, z, scale, mats) {
   const g = new THREE.Group(); g.name = 'desert-cactus';
 
   /* ── Corpo principal ── */
+  //Mete o cacto mais alto alterar o 1.2 * scale para 2.5 * scale.
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1 * scale, 0.12 * scale, 1.2 * scale, 8), mats.cactus);
   body.position.y = 0.6 * scale; body.castShadow = true; g.add(body);
